@@ -47,12 +47,16 @@ data_inicio_contagem = datetime.date(2026, 8, 1) # Referência para a barra de p
 
 # 3. Sidebar (Navegação e Logo)
 with st.sidebar:
-    # Correção da Logo: Buscando caminhos comuns
-    logo_path = "logo_cgod.jpg"
+    # Atualizado para ler o arquivo limpo em PNG
+    logo_path = "logo_cgod.png"
+    
     if os.path.exists(logo_path):
-        st.image(logo_path, use_container_width=True)
+        try:
+            st.image(logo_path, use_container_width=True)
+        except Exception as e:
+            st.error(f"Erro ao ler imagem: {e}")
     else:
-        st.info("Aguardando logo_cgod.jpg...")
+        st.info("Aguardando logo_cgod.png...")
     
     st.title("Navegação")
     tela = st.radio("Selecione a tela:", ["📊 Dashboard Geral", "📅 Cronograma de Posts"])
