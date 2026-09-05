@@ -23,58 +23,58 @@ CATEGORIAS_INFO = {
 }
 
 # Configuração de Status
-STATUS_EMOJIS = {"Programado": "🟡", "Concluído": "🟢", "Atrasado": "🔴"}
 STATUS_COLORS = {"Programado": "#f1c40f", "Concluído": "#2ecc71", "Atrasado": "#e74c3c"}
 
 def formatar_categoria(cat):
     return f"{CATEGORIAS_INFO[cat]['emoji']} {cat}"
 
-# Função inteligente para colorir os botões no cronograma
+# Função super avançada para colorir e estilizar um botão específico
 def renderizar_botao_cronograma(p):
-    cor = CATEGORIAS_INFO[p['categoria']]['cor']
-    icone_status = STATUS_EMOJIS[p['status']]
-    css_class = f"post-btn-{p['id']}"
+    cor_categoria = CATEGORIAS_INFO[p['categoria']]['cor']
+    emoji_categoria = CATEGORIAS_INFO[p['categoria']]['emoji']
+    cor_status = STATUS_COLORS[p['status']]
     
+    # Marcador invisível para conectar o CSS ao botão do Streamlit
+    st.markdown(f'<span id="marker-{p["id"]}" style="display:none;"></span>', unsafe_allow_html=True)
+    
+    # CSS que busca o botão logo abaixo do marcador e aplica o visual profissional (Fundo da Categoria + Faixa do Status)
     st.markdown(f"""
     <style>
-    .{css_class} div[data-testid="stButton"] button {{
-        background-color: {cor} !important;
+    div[data-testid="element-container"]:has(#marker-{p["id"]}) + div[data-testid="element-container"] button {{
+        background-color: {cor_categoria} !important;
         color: white !important;
         border: none !important;
-        border-radius: 4px !important;
-        padding: 6px 8px !important;
+        border-bottom: 5px solid {cor_status} !important; /* Faixa de status */
+        border-radius: 6px !important;
+        padding: 8px 10px !important;
         font-size: 13px !important;
-        line-height: 1.2 !important;
-        min-height: 42px !important;
+        line-height: 1.3 !important;
+        min-height: 48px !important;
         height: auto !important;
         width: 100% !important;
         display: flex !important;
         justify-content: flex-start !important;
-        align-items: flex-start !important;
+        align-items: center !important;
         text-align: left !important;
-        margin-bottom: 2px !important;
-        box-shadow: 1px 1px 3px rgba(0,0,0,0.2) !important;
+        box-shadow: 1px 2px 4px rgba(0,0,0,0.15) !important;
     }}
-    .{css_class} div[data-testid="stButton"] button p {{
+    div[data-testid="element-container"]:has(#marker-{p["id"]}) + div[data-testid="element-container"] button p {{
         white-space: normal !important;
         margin: 0 !important;
         color: white !important;
     }}
-    .{css_class} div[data-testid="stButton"] button:hover {{
+    div[data-testid="element-container"]:has(#marker-{p["id"]}) + div[data-testid="element-container"] button:hover {{
         filter: brightness(0.9) !important;
     }}
     </style>
-    <div class="{css_class}">
     """, unsafe_allow_html=True)
     
-    # O botão em si (assume as regras CSS acima)
-    if st.button(f"{icone_status} {p['titulo']}", key=f"cal_btn_{p['id']}", use_container_width=True):
+    # O botão em si (assume perfeitamente as regras CSS acima)
+    if st.button(f"{emoji_categoria} {p['titulo']}", key=f"cal_btn_{p['id']}", use_container_width=True):
         st.session_state.post_selecionado_id = p['id']
         st.session_state.edit_mode = False
-        st.session_state.scroll_trigger = time.time() # Usa o tempo atual para forçar a rolagem sempre
+        st.session_state.scroll_trigger = time.time()
         st.rerun()
-        
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # 2. Funções de Dados
 def carregar_dados():
@@ -195,8 +195,8 @@ if tela == "📊 Dashboard Geral":
             fig = px.pie(df, names='status', title="Status das Postagens", 
                          color='status', color_discrete_map=STATUS_COLORS,
                          hole=0.4)
-            # Força a fonte interna do gráfico a ficar sempre branca
-            fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(color="white", size=14))
+            # Força o texto interno horizontal e branco
+            fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(color="white", size=14), insidetextorientation='horizontal')
             fig.update_layout(height=250, margin=dict(l=0, r=0, b=0, t=30))
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -210,14 +210,15 @@ if tela == "📊 Dashboard Geral":
         col_list = st.columns(len(futuros) if len(futuros) > 0 else 1)
         
         for idx, (i, row) in enumerate(futuros.iterrows()):
-            cor = CATEGORIAS_INFO[row['categoria']]['cor']
-            icone_status = STATUS_EMOJIS[row['status']]
+            cor_categoria = CATEGORIAS_INFO[row['categoria']]['cor']
+            emoji_categoria = CATEGORIAS_INFO[row['categoria']]['emoji']
+            cor_status = STATUS_COLORS[row['status']]
             
             with col_list[idx]:
                 st.markdown(f"""
-                    <div style="background-color: {cor}; padding: 12px; border-radius: 10px; color: white; min-height: 80px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); margin-bottom: 5px;">
+                    <div style="background-color: {cor_categoria}; border-bottom: 5px solid {cor_status}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); margin-bottom: 5px;">
                         <small style="opacity: 0.9;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
-                        <strong>{icone_status} {row['titulo']}</strong><br>
+                        <strong>{emoji_categoria} {row['titulo']}</strong><br>
                     </div>
                 """, unsafe_allow_html=True)
                 
@@ -257,41 +258,38 @@ else:
                 if qtd > max_posts_na_semana:
                     max_posts_na_semana = qtd
         
-        # Garante no mínimo o tamanho visual de 1 espaço vazio para ficar agradável
         altura_minima_blocos = max(max_posts_na_semana, 1)
 
-        # 2. Renderizar os dias igualando a altura usando blocos vazios
+        # 2. Renderizar os dias igualando a altura (Garante o alinhamento visual dos dias da semana)
         for i, dia in enumerate(semana):
             with cols[i]:
                 with st.container(border=True):
                     if dia == 0:
                         st.markdown(f"**&nbsp;**")
-                        # Preenche os espaços em branco para alinhar
                         for _ in range(altura_minima_blocos):
-                            st.markdown('<div style="height: 48px; margin-bottom: 2px;"></div>', unsafe_allow_html=True)
+                            # Injeta um div da altura exata de um botão para manter o alinhamento
+                            st.markdown('<div style="height: 64px;"></div>', unsafe_allow_html=True)
                     else:
                         st.markdown(f"**{dia}**")
                         data_str = f"2026-{mes_num:02d}-{dia:02d}"
                         posts_dia = [p for p in st.session_state.posts if p['data'] == data_str]
                         
-                        # Desenha os posts reais do dia
                         for p in posts_dia:
                             renderizar_botao_cronograma(p)
                             
-                        # Completa a altura faltante para alinhar com os outros dias
+                        # Completa a altura faltante para alinhar com o dia mais cheio da semana
                         espacos_vazios = altura_minima_blocos - len(posts_dia)
                         for _ in range(espacos_vazios):
-                            st.markdown('<div style="height: 48px; margin-bottom: 2px;"></div>', unsafe_allow_html=True)
+                            st.markdown('<div style="height: 64px;"></div>', unsafe_allow_html=True)
 
 # ================= DETALHES DO POST GLOBAL =================
 if st.session_state.post_selecionado_id:
     st.markdown("<div id='ancora_detalhes' style='padding-top: 20px;'></div>", unsafe_allow_html=True)
     
-    # Rola a tela APENAS se o botão for clicado. O time.time() garante que ele responda a cliques repetidos.
     if st.session_state.scroll_trigger > 0:
         components.html(f"""
             <script>
-                // Timestamp de Atualização: {st.session_state.scroll_trigger}
+                // O TimeStamp garante que ele execute a rolagem a cada novo clique: {st.session_state.scroll_trigger}
                 setTimeout(function() {{
                     const elements = window.parent.document.querySelectorAll('#ancora_detalhes');
                     if (elements.length > 0) {{
@@ -310,8 +308,8 @@ if st.session_state.post_selecionado_id:
         with st.container(border=True):
             c1, c2 = st.columns([4, 1])
             with c1: 
-                icone_status = STATUS_EMOJIS[p['status']]
-                st.subheader(f"{icone_status} {p['titulo']}")
+                emoji_cat = CATEGORIAS_INFO[p['categoria']]['emoji']
+                st.subheader(f"{emoji_cat} {p['titulo']}")
             with c2:
                 if not st.session_state.edit_mode:
                     if st.button("📝 Editar Post", use_container_width=True):
@@ -352,8 +350,10 @@ if st.session_state.post_selecionado_id:
                     col_v1.markdown("**Link:** *Não informado*")
                     
                 col_v2.markdown(f"**Categoria:** {formatar_categoria(p['categoria'])}")
+                
                 cor_status = STATUS_COLORS.get(p['status'], "white")
-                col_v2.markdown(f"**Status:** <span style='color:{cor_status}; font-weight:bold;'>{p['status']}</span>", unsafe_allow_html=True)
+                # Indicação visual de status no detalhamento em formato de "TAG"
+                col_v2.markdown(f"**Status:** <span style='background-color:{cor_status}; color:white; padding: 2px 8px; border-radius: 12px; font-weight:bold; font-size:12px;'>{p['status']}</span>", unsafe_allow_html=True)
                 
                 st.write("---")
                 col_t1, col_t2 = st.columns(2)
