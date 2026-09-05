@@ -29,6 +29,53 @@ STATUS_COLORS = {"Programado": "#f1c40f", "Concluído": "#2ecc71", "Atrasado": "
 def formatar_categoria(cat):
     return f"{CATEGORIAS_INFO[cat]['emoji']} {cat}"
 
+# Função inteligente para colorir os botões no cronograma
+def renderizar_botao_cronograma(p):
+    cor = CATEGORIAS_INFO[p['categoria']]['cor']
+    icone_status = STATUS_EMOJIS[p['status']]
+    css_class = f"post-btn-{p['id']}"
+    
+    st.markdown(f"""
+    <style>
+    .{css_class} div[data-testid="stButton"] button {{
+        background-color: {cor} !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 4px !important;
+        padding: 6px 8px !important;
+        font-size: 13px !important;
+        line-height: 1.2 !important;
+        min-height: 42px !important;
+        height: auto !important;
+        width: 100% !important;
+        display: flex !important;
+        justify-content: flex-start !important;
+        align-items: flex-start !important;
+        text-align: left !important;
+        margin-bottom: 2px !important;
+        box-shadow: 1px 1px 3px rgba(0,0,0,0.2) !important;
+    }}
+    .{css_class} div[data-testid="stButton"] button p {{
+        white-space: normal !important;
+        margin: 0 !important;
+        color: white !important;
+    }}
+    .{css_class} div[data-testid="stButton"] button:hover {{
+        filter: brightness(0.9) !important;
+    }}
+    </style>
+    <div class="{css_class}">
+    """, unsafe_allow_html=True)
+    
+    # O botão em si (assume as regras CSS acima)
+    if st.button(f"{icone_status} {p['titulo']}", key=f"cal_btn_{p['id']}", use_container_width=True):
+        st.session_state.post_selecionado_id = p['id']
+        st.session_state.edit_mode = False
+        st.session_state.scroll_trigger = time.time() # Usa o tempo atual para forçar a rolagem sempre
+        st.rerun()
+        
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # 2. Funções de Dados
 def carregar_dados():
     if os.path.exists(ARQUIVO_DADOS):
@@ -50,11 +97,10 @@ if 'post_selecionado_id' not in st.session_state:
 if 'edit_mode' not in st.session_state:
     st.session_state.edit_mode = False
 if 'scroll_trigger' not in st.session_state:
-    st.session_state.scroll_trigger = False
+    st.session_state.scroll_trigger = 0
 
 data_hoje = datetime.date.today()
 data_evento = datetime.date(2026, 10, 10)
-# A barra de contagem agora se baseia na data estática (05/09/2026)
 data_inicio_contagem = datetime.date(2026, 9, 5) 
 
 # 3. Sidebar (Navegação e Logo)
@@ -149,7 +195,8 @@ if tela == "📊 Dashboard Geral":
             fig = px.pie(df, names='status', title="Status das Postagens", 
                          color='status', color_discrete_map=STATUS_COLORS,
                          hole=0.4)
-            fig.update_traces(textfont_color='white') # Força a cor do texto das porcentagens para branco
+            # Força a fonte interna do gráfico a ficar sempre branca
+            fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(color="white", size=14))
             fig.update_layout(height=250, margin=dict(l=0, r=0, b=0, t=30))
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -168,7 +215,7 @@ if tela == "📊 Dashboard Geral":
             
             with col_list[idx]:
                 st.markdown(f"""
-                    <div style="background-color: {cor}; padding: 12px; border-radius: 10px; color: white; min-height: 100px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); margin-bottom: 5px;">
+                    <div style="background-color: {cor}; padding: 12px; border-radius: 10px; color: white; min-height: 80px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); margin-bottom: 5px;">
                         <small style="opacity: 0.9;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
                         <strong>{icone_status} {row['titulo']}</strong><br>
                     </div>
@@ -177,7 +224,7 @@ if tela == "📊 Dashboard Geral":
                 if st.button("Ver Detalhes", key=f"dash_btn_{row['id']}", use_container_width=True):
                     st.session_state.post_selecionado_id = row['id']
                     st.session_state.edit_mode = False
-                    st.session_state.scroll_trigger = True
+                    st.session_state.scroll_trigger = time.time()
                     st.rerun()
     else:
         st.info("Nenhum post futuro programado.")
@@ -201,68 +248,50 @@ else:
 
     for semana in cal:
         cols = st.columns(7)
+        
+        # 1. Identificar qual dia tem MAIS posts nesta semana específica
+        max_posts_na_semana = 0
+        for dia in semana:
+            if dia != 0:
+                qtd = sum(1 for p in st.session_state.posts if p['data'] == f"2026-{mes_num:02d}-{dia:02d}")
+                if qtd > max_posts_na_semana:
+                    max_posts_na_semana = qtd
+        
+        # Garante no mínimo o tamanho visual de 1 espaço vazio para ficar agradável
+        altura_minima_blocos = max(max_posts_na_semana, 1)
+
+        # 2. Renderizar os dias igualando a altura usando blocos vazios
         for i, dia in enumerate(semana):
             with cols[i]:
-                if dia == 0:
-                    with st.container(border=True):
-                        st.markdown("&nbsp;", unsafe_allow_html=True)
-                else:
-                    with st.container(border=True):
+                with st.container(border=True):
+                    if dia == 0:
+                        st.markdown(f"**&nbsp;**")
+                        # Preenche os espaços em branco para alinhar
+                        for _ in range(altura_minima_blocos):
+                            st.markdown('<div style="height: 48px; margin-bottom: 2px;"></div>', unsafe_allow_html=True)
+                    else:
                         st.markdown(f"**{dia}**")
                         data_str = f"2026-{mes_num:02d}-{dia:02d}"
                         posts_dia = [p for p in st.session_state.posts if p['data'] == data_str]
                         
+                        # Desenha os posts reais do dia
                         for p in posts_dia:
-                            cor = CATEGORIAS_INFO[p['categoria']]['cor']
-                            icone_status = STATUS_EMOJIS[p['status']]
+                            renderizar_botao_cronograma(p)
                             
-                            # O bloco é o próprio botão.
-                            if st.button(f"{icone_status} {p['titulo']}", key=f"cal_btn_{p['id']}", use_container_width=True):
-                                st.session_state.post_selecionado_id = p['id']
-                                st.session_state.edit_mode = False
-                                st.session_state.scroll_trigger = True
-                                st.rerun()
-                            
-                            # Injeta CSS para formatar o botão nativo do Streamlit como um bloco perfeito
-                            st.markdown(f"""
-                            <style>
-                            div[data-testid='stButton'] button[key='cal_btn_{p['id']}'] p {{
-                                white-space: normal !important;
-                                text-align: left !important;
-                                margin: 0 !important;
-                            }}
-                            div[data-testid='stButton'] button[key='cal_btn_{p['id']}'] {{
-                                background-color: {cor} !important;
-                                color: white !important;
-                                border: none !important;
-                                border-radius: 4px !important;
-                                padding: 8px !important;
-                                font-size: 13px !important;
-                                line-height: 1.3 !important;
-                                height: auto !important;
-                                min-height: 40px !important;
-                                box-shadow: 1px 1px 3px rgba(0,0,0,0.2) !important;
-                                display: flex !important;
-                                justify-content: flex-start !important;
-                                align-items: flex-start !important;
-                                width: 100% !important;
-                                margin-bottom: 4px !important;
-                            }}
-                            div[data-testid='stButton'] button[key='cal_btn_{p['id']}']:hover {{
-                                filter: brightness(0.9) !important;
-                            }}
-                            </style>
-                            """, unsafe_allow_html=True)
+                        # Completa a altura faltante para alinhar com os outros dias
+                        espacos_vazios = altura_minima_blocos - len(posts_dia)
+                        for _ in range(espacos_vazios):
+                            st.markdown('<div style="height: 48px; margin-bottom: 2px;"></div>', unsafe_allow_html=True)
 
 # ================= DETALHES DO POST GLOBAL =================
 if st.session_state.post_selecionado_id:
     st.markdown("<div id='ancora_detalhes' style='padding-top: 20px;'></div>", unsafe_allow_html=True)
     
-    # Rola a tela APENAS se o botão for clicado (scroll_trigger ativo). O time.time() garante o recarregamento.
-    if st.session_state.scroll_trigger:
+    # Rola a tela APENAS se o botão for clicado. O time.time() garante que ele responda a cliques repetidos.
+    if st.session_state.scroll_trigger > 0:
         components.html(f"""
             <script>
-                // Timestamp: {time.time()} 
+                // Timestamp de Atualização: {st.session_state.scroll_trigger}
                 setTimeout(function() {{
                     const elements = window.parent.document.querySelectorAll('#ancora_detalhes');
                     if (elements.length > 0) {{
@@ -271,7 +300,6 @@ if st.session_state.post_selecionado_id:
                 }}, 300);
             </script>
         """, height=0, width=0)
-        st.session_state.scroll_trigger = False 
     
     st.divider()
     post_idx = next((i for i, item in enumerate(st.session_state.posts) if item["id"] == st.session_state.post_selecionado_id), None)
