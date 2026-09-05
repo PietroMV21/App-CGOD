@@ -12,7 +12,7 @@ st.set_page_config(page_title="Mídia CGOD XXXV", layout="wide", initial_sidebar
 
 ARQUIVO_DADOS = "posts_dados.json"
 
-# Cores e Categorias (Formatadas para CSS e Gráficos)
+# Cores e Categorias
 CATEGORIAS_INFO = {
     "Lote, Kit e Brindes": {"cor": "#3498db", "emoji": "🔵"},
     "Local e Hotéis do Evento": {"cor": "#2ecc71", "emoji": "🟢"},
@@ -20,6 +20,10 @@ CATEGORIAS_INFO = {
     "Cronograma": {"cor": "#f39c12", "emoji": "🟠"},
     "Atividades": {"cor": "#9b59b6", "emoji": "🟣"}
 }
+
+# Configuração de Status
+STATUS_EMOJIS = {"Programado": "🟡", "Concluído": "🟢", "Atrasado": "🔴"}
+STATUS_COLORS = {"Programado": "#f1c40f", "Concluído": "#2ecc71", "Atrasado": "#e74c3c"}
 
 def formatar_categoria(cat):
     return f"{CATEGORIAS_INFO[cat]['emoji']} {cat}"
@@ -47,7 +51,8 @@ if 'edit_mode' not in st.session_state:
 
 data_hoje = datetime.date.today()
 data_evento = datetime.date(2026, 10, 10)
-data_inicio_contagem = datetime.date(2026, 8, 1) # Usado para criar uma escala de progresso real
+# A barra de contagem agora se baseia na data de hoje estaticamente definida no sistema (05/09/2026)
+data_inicio_contagem = datetime.date(2026, 9, 5) 
 
 # 3. Sidebar (Navegação e Logo)
 with st.sidebar:
@@ -67,13 +72,16 @@ with st.sidebar:
     st.markdown("### XXXV Congresso Estadual")
     st.caption("Erechim - RS | 10 e 11 de Outubro")
 
-# 4. Diálogo de Cadastro
+# 4. Diálogo de Cadastro (Atualizado com novos campos)
 @st.dialog("Cadastrar Novo Post")
 def janela_adicionar_post():
     t = st.text_input("Título do Post")
     r = st.text_input("Responsável")
     c = st.selectbox("Categoria", list(CATEGORIAS_INFO.keys()), format_func=formatar_categoria)
     d = st.date_input("Data", value=data_hoje)
+    
+    desc = st.text_area("Descrição do Post")
+    ori = st.text_area("Orientações")
     link = st.text_input("Link da Postagem (Opcional)")
     
     if st.button("Salvar", type="primary"):
@@ -84,32 +92,41 @@ def janela_adicionar_post():
             "data": d.strftime("%Y-%m-%d"), 
             "categoria": c, 
             "status": "Programado",
+            "descricao": desc,
+            "orientacoes": ori,
             "link": link
         }
         st.session_state.posts.append(novo)
         salvar_dados(st.session_state.posts)
         st.rerun()
 
+# 5. Lógica de atualização de Atrasos
+total = len(st.session_state.posts)
+df = pd.DataFrame(st.session_state.posts) if total > 0 else pd.DataFrame(columns=['status', 'data', 'categoria', 'link'])
+
+if not df.empty:
+    df['data_dt'] = pd.to_datetime(df['data']).dt.date
+    df.loc[(df['data_dt'] < data_hoje) & (df['status'] == 'Programado'), 'status'] = 'Atrasado'
+    
+    # Sincroniza a alteração de atraso com o session_state para que o painel de detalhes reflita a mudança
+    for post in st.session_state.posts:
+        if datetime.datetime.strptime(post['data'], "%Y-%m-%d").date() < data_hoje and post['status'] == 'Programado':
+            post['status'] = 'Atrasado'
+
 # ================= TELA: DASHBOARD =================
 if tela == "📊 Dashboard Geral":
     st.header("Dashboard Analítico de Mídia")
     
-    total = len(st.session_state.posts)
-    df = pd.DataFrame(st.session_state.posts) if total > 0 else pd.DataFrame(columns=['status', 'data', 'categoria', 'link'])
-    
-    if not df.empty:
-        df['data_dt'] = pd.to_datetime(df['data']).dt.date
-        df.loc[(df['data_dt'] < data_hoje) & (df['status'] == 'Programado'), 'status'] = 'Atrasado'
-
     col_m1, col_m2 = st.columns([1, 2])
     with col_m1:
         dias_faltam = (data_evento - data_hoje).days
         st.metric("⏳ Dias para o Evento", f"{dias_faltam} dias")
         
-        # Barra de Progresso e Mensagem Dinâmica
+        # Barra de Progresso e Mensagem Dinâmica (Baseado de 05/09 a 10/10)
         total_dias_escala = (data_evento - data_inicio_contagem).days
         dias_passados = (data_hoje - data_inicio_contagem).days
-        progresso = min(max(dias_passados / total_dias_escala, 0.0), 1.0)
+        # Proteção matemática para não passar de 100% (1.0) ou cair abaixo de 0% (0.0)
+        progresso = min(max(dias_passados / total_dias_escala if total_dias_escala > 0 else 1.0, 0.0), 1.0)
         
         if dias_faltam < 0:
             msg = "O Congresso já passou! 🎉"
@@ -128,7 +145,7 @@ if tela == "📊 Dashboard Geral":
     with col_m2:
         if not df.empty:
             fig = px.pie(df, names='status', title="Status das Postagens", 
-                         color='status', color_discrete_map={'Concluído': '#2ecc71', 'Programado': '#f1c40f', 'Atrasado': '#e74c3c'},
+                         color='status', color_discrete_map=STATUS_COLORS,
                          hole=0.4)
             fig.update_layout(height=250, margin=dict(l=0, r=0, b=0, t=30))
             st.plotly_chart(fig, use_container_width=True)
@@ -143,14 +160,21 @@ if tela == "📊 Dashboard Geral":
         col_list = st.columns(len(futuros) if len(futuros) > 0 else 1)
         for idx, (i, row) in enumerate(futuros.iterrows()):
             cor = CATEGORIAS_INFO[row['categoria']]['cor']
+            icone_status = STATUS_EMOJIS[row['status']]
+            
             with col_list[idx]:
                 st.markdown(f"""
-                    <div style="background-color: {cor}; padding: 15px; border-radius: 10px; color: white; min-height: 120px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1)">
-                        <small>{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
-                        <strong>{row['titulo']}</strong><br>
-                        <small>Responsável: {row['responsavel']}</small>
+                    <div style="background-color: {cor}; padding: 12px; border-radius: 10px; color: white; min-height: 100px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); margin-bottom: 5px;">
+                        <small style="opacity: 0.9;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
+                        <strong>{icone_status} {row['titulo']}</strong><br>
                     </div>
                 """, unsafe_allow_html=True)
+                
+                # Botão interativo abaixo do bloco colorido
+                if st.button("Ver Detalhes", key=f"dash_btn_{row['id']}", use_container_width=True):
+                    st.session_state.post_selecionado_id = row['id']
+                    st.session_state.edit_mode = False
+                    st.rerun()
     else:
         st.info("Nenhum post futuro programado.")
 
@@ -176,7 +200,6 @@ else:
         for i, dia in enumerate(semana):
             with cols[i]:
                 if dia == 0:
-                    # Mantém a grade visual mesmo nos dias vazios
                     with st.container(border=True):
                         st.markdown("&nbsp;", unsafe_allow_html=True)
                 else:
@@ -187,86 +210,91 @@ else:
                         
                         for p in posts_dia:
                             cor = CATEGORIAS_INFO[p['categoria']]['cor']
-                            if st.button(p['titulo'], key=f"cal_{p['id']}", use_container_width=True):
+                            icone_status = STATUS_EMOJIS[p['status']]
+                            
+                            # Bloco colorido puramente HTML para visualização perfeita
+                            st.markdown(f"""
+                            <div style="background-color: {cor}; padding: 6px; border-radius: 4px; color: white; font-size: 13px; line-height: 1.2; margin-bottom: 3px; box-shadow: 1px 1px 3px rgba(0,0,0,0.2);">
+                                <strong>{icone_status} {p['titulo']}</strong>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Botão invisível sobreposto ou botão minimalista logo abaixo
+                            if st.button("👁️ Ver", key=f"cal_btn_{p['id']}", use_container_width=True):
                                 st.session_state.post_selecionado_id = p['id']
                                 st.session_state.edit_mode = False
                                 st.rerun()
-                            
-                            # Injeta CSS para fazer o botão quebrar a linha, expandir e assumir a cor da categoria
-                            st.markdown(f"""
-                            <style>
-                            div[data-testid='stButton'] button[key='cal_{p['id']}'] {{
-                                background-color: {cor} !important;
-                                color: white !important;
-                                border: none;
-                                font-size: 11px;
-                                padding: 6px;
-                                white-space: normal !important;
-                                height: auto !important;
-                                min-height: 35px;
-                                text-align: left;
-                                line-height: 1.2 !important;
-                                margin-bottom: 2px;
-                            }}
-                            </style>
-                            """, unsafe_allow_html=True)
 
-    # ================= DETALHES DO POST (Com rolagem automática) =================
-    if st.session_state.post_selecionado_id:
-        # Âncora HTML invisível
-        st.markdown("<div id='ancora_detalhes' style='margin-top: 20px;'></div>", unsafe_allow_html=True)
-        
-        # Script JS para rolar a tela até a âncora automaticamente
-        components.html("""
-            <script>
-                const target = window.parent.document.getElementById('ancora_detalhes');
-                if (target) {
-                    target.scrollIntoView({behavior: 'smooth', block: 'start'});
+# ================= DETALHES DO POST GLOBAL (Fora do if/else das abas) =================
+# Esse bloco fica no rodapé da página. Não importa a aba, o post abrirá aqui embaixo.
+if st.session_state.post_selecionado_id:
+    # Âncora HTML invisível
+    st.markdown("<div id='ancora_detalhes' style='padding-top: 30px;'></div>", unsafe_allow_html=True)
+    
+    # Script JS com Timeout para garantir a rolagem da tela após carregar os elementos
+    components.html("""
+        <script>
+            setTimeout(function() {
+                const elements = window.parent.document.querySelectorAll('#ancora_detalhes');
+                if (elements.length > 0) {
+                    elements[elements.length - 1].scrollIntoView({behavior: 'smooth', block: 'start'});
                 }
-            </script>
-        """, height=0, width=0)
+            }, 100);
+        </script>
+    """, height=0, width=0)
+    
+    st.divider()
+    post_idx = next((i for i, item in enumerate(st.session_state.posts) if item["id"] == st.session_state.post_selecionado_id), None)
+    
+    if post_idx is not None:
+        p = st.session_state.posts[post_idx]
         
-        st.divider()
-        post_idx = next((i for i, item in enumerate(st.session_state.posts) if item["id"] == st.session_state.post_selecionado_id), None)
-        
-        if post_idx is not None:
-            p = st.session_state.posts[post_idx]
-            
-            with st.container(border=True):
-                c1, c2 = st.columns([3, 1])
-                with c1: st.subheader(f"Detalhes: {p['titulo']}")
-                with c2:
-                    if not st.session_state.edit_mode:
-                        if st.button("📝 Editar Post", use_container_width=True):
-                            st.session_state.edit_mode = True
-                            st.rerun()
-                    else:
-                        if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
-                            st.session_state.edit_mode = False
-                            salvar_dados(st.session_state.posts)
-                            st.success("Post atualizado!")
-                            st.rerun()
-
-                if st.session_state.edit_mode:
-                    col_e1, col_e2 = st.columns(2)
-                    p['titulo'] = col_e1.text_input("Título", p['titulo'])
-                    p['responsavel'] = col_e1.text_input("Responsável", p['responsavel'])
-                    p['link'] = col_e1.text_input("Link da Postagem", p.get('link', ''))
-                    
-                    p['data'] = col_e2.date_input("Data", datetime.datetime.strptime(p['data'], '%Y-%m-%d')).strftime("%Y-%m-%d")
-                    p['categoria'] = col_e2.selectbox("Categoria", list(CATEGORIAS_INFO.keys()), index=list(CATEGORIAS_INFO.keys()).index(p['categoria']), format_func=formatar_categoria)
-                    p['status'] = col_e2.selectbox("Status", ["Programado", "Concluído", "Atrasado"], index=["Programado", "Concluído", "Atrasado"].index(p['status']))
+        with st.container(border=True):
+            c1, c2 = st.columns([4, 1])
+            with c1: 
+                icone_status = STATUS_EMOJIS[p['status']]
+                st.subheader(f"{icone_status} {p['titulo']}")
+            with c2:
+                if not st.session_state.edit_mode:
+                    if st.button("📝 Editar Post", use_container_width=True):
+                        st.session_state.edit_mode = True
+                        st.rerun()
                 else:
-                    col_v1, col_v2 = st.columns(2)
-                    col_v1.markdown(f"**Responsável:** {p['responsavel']}")
-                    col_v1.markdown(f"**Data:** {datetime.datetime.strptime(p['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}")
+                    if st.button("💾 Salvar Alterações", type="primary", use_container_width=True):
+                        st.session_state.edit_mode = False
+                        salvar_dados(st.session_state.posts)
+                        st.success("Post atualizado!")
+                        st.rerun()
+
+            if st.session_state.edit_mode:
+                col_e1, col_e2 = st.columns(2)
+                p['titulo'] = col_e1.text_input("Título", p['titulo'])
+                p['responsavel'] = col_e1.text_input("Responsável", p['responsavel'])
+                p['link'] = col_e1.text_input("Link da Postagem", p.get('link', ''))
+                
+                p['data'] = col_e2.date_input("Data", datetime.datetime.strptime(p['data'], '%Y-%m-%d')).strftime("%Y-%m-%d")
+                p['categoria'] = col_e2.selectbox("Categoria", list(CATEGORIAS_INFO.keys()), index=list(CATEGORIAS_INFO.keys()).index(p['categoria']), format_func=formatar_categoria)
+                p['status'] = col_e2.selectbox("Status", ["Programado", "Concluído", "Atrasado"], index=["Programado", "Concluído", "Atrasado"].index(p['status']))
+                
+                p['descricao'] = st.text_area("Descrição do Post", p.get('descricao', ''))
+                p['orientacoes'] = st.text_area("Orientações", p.get('orientacoes', ''))
+            
+            else:
+                col_v1, col_v2 = st.columns(2)
+                col_v1.markdown(f"**Responsável:** {p['responsavel']}")
+                col_v1.markdown(f"**Data:** {datetime.datetime.strptime(p['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}")
+                if p.get('link'):
+                    col_v1.markdown(f"**Link:** [Acessar Publicação]({p['link']})")
                     
-                    if p.get('link'):
-                        col_v1.markdown(f"**Link:** [Acessar Publicação]({p['link']})")
-                        
-                    col_v2.markdown(f"**Categoria:** {formatar_categoria(p['categoria'])}")
-                    
-                    # Definição das cores de status em texto
-                    status_colors = {"Programado": "#f1c40f", "Concluído": "#2ecc71", "Atrasado": "#e74c3c"}
-                    cor_status = status_colors.get(p['status'], "white")
-                    col_v2.markdown(f"**Status:** <span style='color:{cor_status}; font-weight:bold;'>{p['status']}</span>", unsafe_allow_html=True)
+                col_v2.markdown(f"**Categoria:** {formatar_categoria(p['categoria'])}")
+                cor_status = STATUS_COLORS.get(p['status'], "white")
+                col_v2.markdown(f"**Status:** <span style='color:{cor_status}; font-weight:bold;'>{p['status']}</span>", unsafe_allow_html=True)
+                
+                st.write("---")
+                col_t1, col_t2 = st.columns(2)
+                with col_t1:
+                    st.markdown("**Descrição do Post:**")
+                    st.info(p.get('descricao', 'Nenhuma descrição informada.'))
+                with col_t2:
+                    st.markdown("**Orientações:**")
+                    st.warning(p.get('orientacoes', 'Nenhuma orientação informada.'))
