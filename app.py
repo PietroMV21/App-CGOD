@@ -41,29 +41,34 @@ def salvar_dados(dados):
     with open(ARQUIVO_DADOS, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
-# Inicialização
+# Inicialização de variáveis globais
 if 'posts' not in st.session_state:
     st.session_state.posts = carregar_dados()
 if 'post_selecionado_id' not in st.session_state:
     st.session_state.post_selecionado_id = None
 if 'edit_mode' not in st.session_state:
     st.session_state.edit_mode = False
+if 'scroll_trigger' not in st.session_state:
+    st.session_state.scroll_trigger = False
 
 data_hoje = datetime.date.today()
 data_evento = datetime.date(2026, 10, 10)
-# A barra de contagem agora se baseia na data de hoje estaticamente definida no sistema (05/09/2026)
+# A barra de contagem agora se baseia na data estática (05/09/2026)
 data_inicio_contagem = datetime.date(2026, 9, 5) 
 
 # 3. Sidebar (Navegação e Logo)
 with st.sidebar:
-    logo_path = "logo_cgod.png"
-    if os.path.exists(logo_path):
+    # Array inteligente para aceitar a imagem independente do nome que estiver no Github
+    logo_options = ["Logo CGOD.jpg", "logo_cgod.png", "logo_cgod.jpg"]
+    logo_path = next((path for path in logo_options if os.path.exists(path)), None)
+    
+    if logo_path:
         try:
             st.image(logo_path, use_container_width=True)
         except Exception as e:
             st.error(f"Erro ao ler imagem: {e}")
     else:
-        st.info("Aguardando logo_cgod.png...")
+        st.warning("Arquivo 'Logo CGOD.jpg' não encontrado.")
     
     st.title("Navegação")
     tela = st.radio("Selecione a tela:", ["📊 Dashboard Geral", "📅 Cronograma de Posts"])
@@ -72,7 +77,7 @@ with st.sidebar:
     st.markdown("### XXXV Congresso Estadual")
     st.caption("Erechim - RS | 10 e 11 de Outubro")
 
-# 4. Diálogo de Cadastro (Atualizado com novos campos)
+# 4. Diálogo de Cadastro 
 @st.dialog("Cadastrar Novo Post")
 def janela_adicionar_post():
     t = st.text_input("Título do Post")
@@ -158,23 +163,27 @@ if tela == "📊 Dashboard Geral":
     if not df.empty:
         futuros = df[df['status'] != 'Concluído'].sort_values('data').head(5)
         col_list = st.columns(len(futuros) if len(futuros) > 0 else 1)
+        
         for idx, (i, row) in enumerate(futuros.iterrows()):
             cor = CATEGORIAS_INFO[row['categoria']]['cor']
             icone_status = STATUS_EMOJIS[row['status']]
             
             with col_list[idx]:
-                st.markdown(f"""
-                    <div style="background-color: {cor}; padding: 12px; border-radius: 10px; color: white; min-height: 100px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); margin-bottom: 5px;">
-                        <small style="opacity: 0.9;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
-                        <strong>{icone_status} {row['titulo']}</strong><br>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                # Botão interativo abaixo do bloco colorido
-                if st.button("Ver Detalhes", key=f"dash_btn_{row['id']}", use_container_width=True):
-                    st.session_state.post_selecionado_id = row['id']
-                    st.session_state.edit_mode = False
-                    st.rerun()
+                # Bloco e botão organizados lado a lado no dashboard
+                c1, c2 = st.columns([5, 1])
+                with c1:
+                    st.markdown(f"""
+                        <div style="background-color: {cor}; padding: 12px; border-radius: 8px; color: white; min-height: 80px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
+                            <small style="opacity: 0.9;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
+                            <strong>{icone_status} {row['titulo']}</strong>
+                        </div>
+                    """, unsafe_allow_html=True)
+                with c2:
+                    if st.button("ℹ️", key=f"dash_btn_{row['id']}", help="Ver Detalhes"):
+                        st.session_state.post_selecionado_id = row['id']
+                        st.session_state.edit_mode = False
+                        st.session_state.scroll_trigger = True
+                        st.rerun()
     else:
         st.info("Nenhum post futuro programado.")
 
@@ -212,36 +221,39 @@ else:
                             cor = CATEGORIAS_INFO[p['categoria']]['cor']
                             icone_status = STATUS_EMOJIS[p['status']]
                             
-                            # Bloco colorido puramente HTML para visualização perfeita
-                            st.markdown(f"""
-                            <div style="background-color: {cor}; padding: 6px; border-radius: 4px; color: white; font-size: 13px; line-height: 1.2; margin-bottom: 3px; box-shadow: 1px 1px 3px rgba(0,0,0,0.2);">
-                                <strong>{icone_status} {p['titulo']}</strong>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            # Botão invisível sobreposto ou botão minimalista logo abaixo
-                            if st.button("👁️ Ver", key=f"cal_btn_{p['id']}", use_container_width=True):
-                                st.session_state.post_selecionado_id = p['id']
-                                st.session_state.edit_mode = False
-                                st.rerun()
+                            # Organiza o bloco e o botão discreto lado a lado no cronograma
+                            col_b1, col_b2 = st.columns([4, 1])
+                            with col_b1:
+                                st.markdown(f"""
+                                <div style="background-color: {cor}; padding: 6px; border-radius: 4px; color: white; font-size: 13px; line-height: 1.2; box-shadow: 1px 1px 3px rgba(0,0,0,0.2);">
+                                    {icone_status} {p['titulo']}
+                                </div>
+                                """, unsafe_allow_html=True)
+                            with col_b2:
+                                if st.button("ℹ️", key=f"cal_btn_{p['id']}", help="Detalhes"):
+                                    st.session_state.post_selecionado_id = p['id']
+                                    st.session_state.edit_mode = False
+                                    st.session_state.scroll_trigger = True
+                                    st.rerun()
 
 # ================= DETALHES DO POST GLOBAL (Fora do if/else das abas) =================
-# Esse bloco fica no rodapé da página. Não importa a aba, o post abrirá aqui embaixo.
 if st.session_state.post_selecionado_id:
     # Âncora HTML invisível
     st.markdown("<div id='ancora_detalhes' style='padding-top: 30px;'></div>", unsafe_allow_html=True)
     
-    # Script JS com Timeout para garantir a rolagem da tela após carregar os elementos
-    components.html("""
-        <script>
-            setTimeout(function() {
-                const elements = window.parent.document.querySelectorAll('#ancora_detalhes');
-                if (elements.length > 0) {
-                    elements[elements.length - 1].scrollIntoView({behavior: 'smooth', block: 'start'});
-                }
-            }, 100);
-        </script>
-    """, height=0, width=0)
+    # Rola a tela APENAS se o botão for clicado, não em trocas de aba
+    if st.session_state.scroll_trigger:
+        components.html("""
+            <script>
+                setTimeout(function() {
+                    const elements = window.parent.document.querySelectorAll('#ancora_detalhes');
+                    if (elements.length > 0) {
+                        elements[elements.length - 1].scrollIntoView({behavior: 'smooth', block: 'start'});
+                    }
+                }, 200);
+            </script>
+        """, height=0, width=0)
+        st.session_state.scroll_trigger = False # Reseta o gatilho imediatamente
     
     st.divider()
     post_idx = next((i for i, item in enumerate(st.session_state.posts) if item["id"] == st.session_state.post_selecionado_id), None)
