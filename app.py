@@ -29,43 +29,57 @@ STATUS_COLORS = {"Programado": "#f1c40f", "Concluído": "#2ecc71", "Atrasado": "
 def formatar_categoria(cat):
     return f"{CATEGORIAS_INFO[cat]['emoji']} {cat}"
 
-# Função DEFINITIVA para renderizar o Card perfeito no Cronograma
+# Função para renderizar o Card NATIVO perfeito no Cronograma
 def renderizar_botao_cronograma(p):
     cor_categoria = CATEGORIAS_INFO[p['categoria']]['cor']
     icone_status = STATUS_EMOJIS[p['status']]
-    cor_status = STATUS_COLORS[p['status']]
     
     help_id = f"post_cal_{p['id']}"
     
-    # 1. Renderiza o Card visualmente perfeito em puro HTML/CSS (Idêntico à Imagem 4)
-    st.markdown(f"""
-    <div style="background-color: {cor_categoria}; border-bottom: 5px solid {cor_status}; border-radius: 8px; padding: 10px; height: 65px; color: white; box-shadow: 1px 2px 4px rgba(0,0,0,0.2); position: relative;">
-        <div style="font-size: 13px; font-weight: bold; line-height: 1.2; padding-right: 22px;">
-            {icone_status} {p['titulo']}
-        </div>
-        <span style="position: absolute; right: 8px; top: 22px; font-size: 16px; opacity: 0.9;">ℹ️</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # 2. Renderiza o botão invisível e o puxa para CIMA do HTML
+    # CSS avançado injetando o fundo neutro, faixa superior e o ícone (ℹ️) à direita
     st.markdown(f"""
     <style>
-    div[title="{help_id}"] button,
-    div[data-testid="stTooltipHoverTarget"][title="{help_id}"] button {{
-        opacity: 0 !important;
-        height: 65px !important;
-        margin-top: -80px !important; /* Puxa o botão exatamente para cima da caixa HTML */
-        position: relative !important;
-        z-index: 10 !important;
+    button[title="{help_id}"] {{
+        background-color: #262730 !important; /* Fundo Neutro */
+        color: white !important;
+        border: 1px solid rgba(255,255,255,0.05) !important;
+        border-top: 5px solid {cor_categoria} !important; /* Faixa da Categoria */
+        border-radius: 6px !important;
+        padding: 10px !important;
+        font-size: 13px !important;
+        line-height: 1.3 !important;
+        min-height: 55px !important;
+        height: auto !important;
         width: 100% !important;
-        padding: 0 !important;
-        box-shadow: none !important;
+        display: flex !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        text-align: left !important;
+        box-shadow: 1px 2px 4px rgba(0,0,0,0.2) !important;
+        margin-bottom: 0px !important;
+    }}
+    button[title="{help_id}"] p {{
+        white-space: normal !important;
+        margin: 0 !important;
+        color: white !important;
+    }}
+    /* Ícone de informações inserido via CSS no canto direito */
+    button[title="{help_id}"]::after {{
+        content: 'ℹ️';
+        margin-left: auto;
+        font-size: 14px;
+        opacity: 0.6;
+        padding-left: 8px;
+    }}
+    button[title="{help_id}"]:hover {{
+        filter: brightness(1.2) !important;
+        border-color: {cor_categoria} !important;
     }}
     </style>
     """, unsafe_allow_html=True)
     
-    # O botão Streamlit (Fica transparente cobrindo a caixa inteira)
-    if st.button(" ", key=f"cal_btn_{p['id']}", help=help_id, use_container_width=True):
+    # O botão Streamlit (Tudo é clicável)
+    if st.button(f"{icone_status} {p['titulo']}", key=f"cal_btn_{p['id']}", help=help_id, use_container_width=True):
         st.session_state.post_selecionado_id = p['id']
         st.session_state.edit_mode = False
         st.session_state.scroll_trigger = time.time()
@@ -118,7 +132,7 @@ with st.sidebar:
     st.markdown("### XXXV Congresso Estadual")
     st.caption("Erechim - RS | 10 e 11 de Outubro")
 
-# 4. Diálogos Flutuantes (Cadastro e Exclusão)
+# 4. Diálogo de Cadastro 
 @st.dialog("Cadastrar Novo Post")
 def janela_adicionar_post():
     t = st.text_input("Título do Post")
@@ -144,20 +158,6 @@ def janela_adicionar_post():
         }
         st.session_state.posts.append(novo)
         salvar_dados(st.session_state.posts)
-        st.rerun()
-
-@st.dialog("Confirmar Exclusão")
-def janela_excluir_post(post_id):
-    st.warning("⚠️ Tem certeza que deseja excluir esta postagem? Essa ação não poderá ser desfeita.")
-    c1, c2 = st.columns(2)
-    if c1.button("Sim, Excluir", type="primary", use_container_width=True):
-        st.session_state.posts = [p for p in st.session_state.posts if p['id'] != post_id]
-        salvar_dados(st.session_state.posts)
-        st.session_state.post_selecionado_id = None
-        st.success("Postagem excluída com sucesso!")
-        time.sleep(1)
-        st.rerun()
-    if c2.button("Cancelar", use_container_width=True):
         st.rerun()
 
 # 5. Lógica de atualização de Atrasos
@@ -204,7 +204,7 @@ if tela == "📊 Dashboard Geral":
             fig = px.pie(df, names='status', title="Status das Postagens", 
                          color='status', color_discrete_map=STATUS_COLORS,
                          hole=0.4)
-            # Plotly no modo padrão: Textos centralizados perfeitamente na cor branca
+            # Voltei ao padrão do Plotly para alinhar as fatias corretamente, mantendo texto branco
             fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(color="white", size=14))
             fig.update_layout(height=250, margin=dict(l=0, r=0, b=0, t=30))
             st.plotly_chart(fig, use_container_width=True)
@@ -221,13 +221,16 @@ if tela == "📊 Dashboard Geral":
         for idx, (i, row) in enumerate(futuros.iterrows()):
             cor_categoria = CATEGORIAS_INFO[row['categoria']]['cor']
             icone_status = STATUS_EMOJIS[row['status']]
-            cor_status = STATUS_COLORS[row['status']]
             
             with col_list[idx]:
+                # Dashboard atualizado com a mesma identidade (Fundo neutro, topo da cor da categoria, emoji de status)
                 st.markdown(f"""
-                    <div style="background-color: {cor_categoria}; border-bottom: 5px solid {cor_status}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px;">
-                        <small style="opacity: 0.9;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
-                        <strong>{icone_status} {row['titulo']}</strong><br>
+                    <div style="background-color: #262730; border-top: 5px solid {cor_categoria}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <small style="opacity: 0.8;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                            <span style="font-size: 14px;">{icone_status}</span>
+                            <strong style="font-size: 14px;">{row['titulo']}</strong>
+                        </div>
                     </div>
                 """, unsafe_allow_html=True)
                 
@@ -259,7 +262,7 @@ else:
     for semana in cal:
         cols = st.columns(7)
         
-        # 1. Identifica qual dia tem a MAIOR quantidade de posts nesta semana
+        # 1. Identificar qual dia tem MAIS posts nesta semana específica
         max_posts_na_semana = 0
         for dia in semana:
             if dia != 0:
@@ -269,15 +272,15 @@ else:
         
         altura_minima_blocos = max(max_posts_na_semana, 1)
 
-        # 2. Renderiza os dias igualando as alturas com blocos fantasmas transparentes
+        # 2. Renderizar os dias igualando a altura perfeitamente
         for i, dia in enumerate(semana):
             with cols[i]:
                 with st.container(border=True):
                     if dia == 0:
                         st.markdown(f"**&nbsp;**")
                         for _ in range(altura_minima_blocos):
-                            # Injeta bloco com a altura exata do componente renderizar_botao_cronograma
-                            st.markdown('<div style="height: 65px; margin-bottom: 15px;"></div>', unsafe_allow_html=True)
+                            # Injeta um espaço vazio exatamente com a altura que o botão renderiza
+                            st.markdown('<div style="height: 55px; margin-bottom: 1rem;"></div>', unsafe_allow_html=True)
                     else:
                         st.markdown(f"**{dia}**")
                         data_str = f"2026-{mes_num:02d}-{dia:02d}"
@@ -286,16 +289,16 @@ else:
                         for p in posts_dia:
                             renderizar_botao_cronograma(p)
                             
-                        # Completa o vazio nos dias que têm menos posts que o dia máximo
+                        # Completa os "buracos" para os dias que tem menos posts que o dia mais cheio da semana
                         espacos_vazios = altura_minima_blocos - len(posts_dia)
                         for _ in range(espacos_vazios):
-                            st.markdown('<div style="height: 65px; margin-bottom: 15px;"></div>', unsafe_allow_html=True)
+                            st.markdown('<div style="height: 55px; margin-bottom: 1rem;"></div>', unsafe_allow_html=True)
 
 # ================= DETALHES DO POST GLOBAL =================
 if st.session_state.post_selecionado_id:
     st.markdown("<div id='ancora_detalhes' style='padding-top: 20px;'></div>", unsafe_allow_html=True)
     
-    # O TimeStamp atualizado força a rolagem toda vez que você clica no botão, sem bugar nas abas
+    # O TimeStamp atualizado força a rolagem toda vez que você clica em Ver
     if st.session_state.scroll_trigger > 0:
         components.html(f"""
             <script>
@@ -317,13 +320,13 @@ if st.session_state.post_selecionado_id:
         p = st.session_state.posts[post_idx]
         
         with st.container(border=True):
-            c1, c2, c3 = st.columns([3, 1, 1]) # Adicionado um pequeno botão para o Excluir
+            c1, c2 = st.columns([4, 1])
             with c1: 
                 icone_status = STATUS_EMOJIS[p['status']]
                 st.subheader(f"{icone_status} {p['titulo']}")
             with c2:
                 if not st.session_state.edit_mode:
-                    if st.button("📝 Editar", use_container_width=True):
+                    if st.button("📝 Editar Post", use_container_width=True):
                         st.session_state.edit_mode = True
                         st.rerun()
                 else:
@@ -332,11 +335,6 @@ if st.session_state.post_selecionado_id:
                         salvar_dados(st.session_state.posts)
                         st.success("Post atualizado!")
                         st.rerun()
-            with c3:
-                if not st.session_state.edit_mode:
-                    if st.button("🗑️ Excluir", use_container_width=True):
-                        janela_excluir_post(p['id'])
-                else:
                     if st.button("❌ Cancelar", use_container_width=True):
                         st.session_state.edit_mode = False
                         st.rerun()
