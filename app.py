@@ -6,40 +6,10 @@ import os
 import pandas as pd
 import plotly.express as px
 import streamlit.components.v1 as components
+import time
 
 # 1. Configuração Inicial
 st.set_page_config(page_title="Mídia CGOD XXXV", layout="wide", initial_sidebar_state="expanded")
-
-# Injeção de CSS global para o botão discreto do cronograma
-st.markdown("""
-<style>
-.btn-info-calendario {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: -32px; /* Puxa o botão para cima do bloco HTML */
-    margin-bottom: 8px;
-    padding-right: 5px;
-    position: relative;
-    z-index: 10;
-}
-.btn-info-calendario div[data-testid="stButton"] button {
-    background-color: rgba(255, 255, 255, 0.3) !important;
-    border: none !important;
-    color: white !important;
-    border-radius: 4px !important;
-    width: 26px !important;
-    height: 26px !important;
-    min-height: 26px !important;
-    padding: 0 !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.btn-info-calendario div[data-testid="stButton"] button:hover {
-    background-color: rgba(255, 255, 255, 0.6) !important;
-}
-</style>
-""", unsafe_allow_html=True)
 
 ARQUIVO_DADOS = "posts_dados.json"
 
@@ -179,6 +149,7 @@ if tela == "📊 Dashboard Geral":
             fig = px.pie(df, names='status', title="Status das Postagens", 
                          color='status', color_discrete_map=STATUS_COLORS,
                          hole=0.4)
+            fig.update_traces(textfont_color='white') # Força a cor do texto das porcentagens para branco
             fig.update_layout(height=250, margin=dict(l=0, r=0, b=0, t=30))
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -245,36 +216,59 @@ else:
                             cor = CATEGORIAS_INFO[p['categoria']]['cor']
                             icone_status = STATUS_EMOJIS[p['status']]
                             
-                            # Bloco ocupando toda a largura e com padding extra embaixo para encaixar o botão
-                            st.markdown(f"""
-                            <div style="background-color: {cor}; padding: 6px; border-radius: 4px; color: white; font-size: 13px; line-height: 1.2; box-shadow: 1px 1px 3px rgba(0,0,0,0.2); word-wrap: break-word; padding-bottom: 24px;">
-                                <strong>{icone_status} {p['titulo']}</strong>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            # Botão discreto puxado para cima via CSS global
-                            st.markdown('<div class="btn-info-calendario">', unsafe_allow_html=True)
-                            if st.button("ℹ️", key=f"cal_btn_{p['id']}", help="Ver Detalhes"):
+                            # O bloco é o próprio botão.
+                            if st.button(f"{icone_status} {p['titulo']}", key=f"cal_btn_{p['id']}", use_container_width=True):
                                 st.session_state.post_selecionado_id = p['id']
                                 st.session_state.edit_mode = False
                                 st.session_state.scroll_trigger = True
                                 st.rerun()
-                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Injeta CSS para formatar o botão nativo do Streamlit como um bloco perfeito
+                            st.markdown(f"""
+                            <style>
+                            div[data-testid='stButton'] button[key='cal_btn_{p['id']}'] p {{
+                                white-space: normal !important;
+                                text-align: left !important;
+                                margin: 0 !important;
+                            }}
+                            div[data-testid='stButton'] button[key='cal_btn_{p['id']}'] {{
+                                background-color: {cor} !important;
+                                color: white !important;
+                                border: none !important;
+                                border-radius: 4px !important;
+                                padding: 8px !important;
+                                font-size: 13px !important;
+                                line-height: 1.3 !important;
+                                height: auto !important;
+                                min-height: 40px !important;
+                                box-shadow: 1px 1px 3px rgba(0,0,0,0.2) !important;
+                                display: flex !important;
+                                justify-content: flex-start !important;
+                                align-items: flex-start !important;
+                                width: 100% !important;
+                                margin-bottom: 4px !important;
+                            }}
+                            div[data-testid='stButton'] button[key='cal_btn_{p['id']}']:hover {{
+                                filter: brightness(0.9) !important;
+                            }}
+                            </style>
+                            """, unsafe_allow_html=True)
 
 # ================= DETALHES DO POST GLOBAL =================
 if st.session_state.post_selecionado_id:
     st.markdown("<div id='ancora_detalhes' style='padding-top: 20px;'></div>", unsafe_allow_html=True)
     
-    # Rola a tela APENAS se o botão for clicado (scroll_trigger ativo)
+    # Rola a tela APENAS se o botão for clicado (scroll_trigger ativo). O time.time() garante o recarregamento.
     if st.session_state.scroll_trigger:
-        components.html("""
+        components.html(f"""
             <script>
-                setTimeout(function() {
+                // Timestamp: {time.time()} 
+                setTimeout(function() {{
                     const elements = window.parent.document.querySelectorAll('#ancora_detalhes');
-                    if (elements.length > 0) {
-                        elements[elements.length - 1].scrollIntoView({behavior: 'smooth', block: 'start'});
-                    }
-                }, 200);
+                    if (elements.length > 0) {{
+                        elements[elements.length - 1].scrollIntoView({{behavior: 'smooth', block: 'start'}});
+                    }}
+                }}, 300);
             </script>
         """, height=0, width=0)
         st.session_state.scroll_trigger = False 
