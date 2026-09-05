@@ -29,48 +29,56 @@ STATUS_COLORS = {"Programado": "#f1c40f", "Concluído": "#2ecc71", "Atrasado": "
 def formatar_categoria(cat):
     return f"{CATEGORIAS_INFO[cat]['emoji']} {cat}"
 
-# Função à prova de falhas para colorir botões (usa o atributo 'help'/'title' do HTML)
+# Função para renderizar o Card NATIVO perfeito no Cronograma
 def renderizar_botao_cronograma(p):
     cor_categoria = CATEGORIAS_INFO[p['categoria']]['cor']
     icone_status = STATUS_EMOJIS[p['status']]
-    cor_status = STATUS_COLORS[p['status']]
     
-    # Criamos um ID único que será injetado no 'help' do botão
     help_id = f"post_cal_{p['id']}"
     
+    # CSS avançado injetando o fundo neutro, faixa superior e o ícone (ℹ️) à direita
     st.markdown(f"""
     <style>
     button[title="{help_id}"] {{
-        background-color: {cor_categoria} !important;
+        background-color: #262730 !important; /* Fundo Neutro */
         color: white !important;
-        border: none !important;
-        border-bottom: 5px solid {cor_status} !important; /* Faixa de Status */
+        border: 1px solid rgba(255,255,255,0.05) !important;
+        border-top: 5px solid {cor_categoria} !important; /* Faixa da Categoria */
         border-radius: 6px !important;
-        padding: 8px 10px !important;
+        padding: 10px !important;
         font-size: 13px !important;
         line-height: 1.3 !important;
-        min-height: 48px !important;
+        min-height: 55px !important;
         height: auto !important;
         width: 100% !important;
         display: flex !important;
         justify-content: flex-start !important;
         align-items: center !important;
         text-align: left !important;
-        box-shadow: 1px 2px 4px rgba(0,0,0,0.15) !important;
-        margin-bottom: 4px !important;
+        box-shadow: 1px 2px 4px rgba(0,0,0,0.2) !important;
+        margin-bottom: 0px !important;
     }}
     button[title="{help_id}"] p {{
         white-space: normal !important;
         margin: 0 !important;
         color: white !important;
     }}
+    /* Ícone de informações inserido via CSS no canto direito */
+    button[title="{help_id}"]::after {{
+        content: 'ℹ️';
+        margin-left: auto;
+        font-size: 14px;
+        opacity: 0.6;
+        padding-left: 8px;
+    }}
     button[title="{help_id}"]:hover {{
-        filter: brightness(0.9) !important;
+        filter: brightness(1.2) !important;
+        border-color: {cor_categoria} !important;
     }}
     </style>
     """, unsafe_allow_html=True)
     
-    # O botão Streamlit (o help_id faz a mágica de puxar o CSS acima)
+    # O botão Streamlit (Tudo é clicável)
     if st.button(f"{icone_status} {p['titulo']}", key=f"cal_btn_{p['id']}", help=help_id, use_container_width=True):
         st.session_state.post_selecionado_id = p['id']
         st.session_state.edit_mode = False
@@ -196,15 +204,8 @@ if tela == "📊 Dashboard Geral":
             fig = px.pie(df, names='status', title="Status das Postagens", 
                          color='status', color_discrete_map=STATUS_COLORS,
                          hole=0.4)
-            # Force rotation to 90 degrees and text horizontal to perfectly align "Concluído"
-            fig.update_traces(
-                textposition='inside', 
-                textinfo='percent+label', 
-                textfont=dict(color="white", size=14), 
-                insidetextorientation='horizontal',
-                sort=False,
-                rotation=90
-            )
+            # Voltei ao padrão do Plotly para alinhar as fatias corretamente, mantendo texto branco
+            fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(color="white", size=14))
             fig.update_layout(height=250, margin=dict(l=0, r=0, b=0, t=30))
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -220,13 +221,16 @@ if tela == "📊 Dashboard Geral":
         for idx, (i, row) in enumerate(futuros.iterrows()):
             cor_categoria = CATEGORIAS_INFO[row['categoria']]['cor']
             icone_status = STATUS_EMOJIS[row['status']]
-            cor_status = STATUS_COLORS[row['status']]
             
             with col_list[idx]:
+                # Dashboard atualizado com a mesma identidade (Fundo neutro, topo da cor da categoria, emoji de status)
                 st.markdown(f"""
-                    <div style="background-color: {cor_categoria}; border-bottom: 5px solid {cor_status}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); margin-bottom: 5px;">
-                        <small style="opacity: 0.9;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
-                        <strong>{icone_status} {row['titulo']}</strong><br>
+                    <div style="background-color: #262730; border-top: 5px solid {cor_categoria}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <small style="opacity: 0.8;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                            <span style="font-size: 14px;">{icone_status}</span>
+                            <strong style="font-size: 14px;">{row['titulo']}</strong>
+                        </div>
                     </div>
                 """, unsafe_allow_html=True)
                 
@@ -268,15 +272,15 @@ else:
         
         altura_minima_blocos = max(max_posts_na_semana, 1)
 
-        # 2. Renderizar os dias igualando a altura (Garante o alinhamento visual)
+        # 2. Renderizar os dias igualando a altura perfeitamente
         for i, dia in enumerate(semana):
             with cols[i]:
                 with st.container(border=True):
                     if dia == 0:
                         st.markdown(f"**&nbsp;**")
                         for _ in range(altura_minima_blocos):
-                            # Injeta um espaço transparente com a exata altura de um botão
-                            st.markdown('<div style="height: 52px; display: block; margin-bottom: 4px;">&nbsp;</div>', unsafe_allow_html=True)
+                            # Injeta um espaço vazio exatamente com a altura que o botão renderiza
+                            st.markdown('<div style="height: 55px; margin-bottom: 1rem;"></div>', unsafe_allow_html=True)
                     else:
                         st.markdown(f"**{dia}**")
                         data_str = f"2026-{mes_num:02d}-{dia:02d}"
@@ -285,16 +289,16 @@ else:
                         for p in posts_dia:
                             renderizar_botao_cronograma(p)
                             
-                        # Completa a altura faltante para alinhar com o dia mais cheio da semana
+                        # Completa os "buracos" para os dias que tem menos posts que o dia mais cheio da semana
                         espacos_vazios = altura_minima_blocos - len(posts_dia)
                         for _ in range(espacos_vazios):
-                            st.markdown('<div style="height: 52px; display: block; margin-bottom: 4px;">&nbsp;</div>', unsafe_allow_html=True)
+                            st.markdown('<div style="height: 55px; margin-bottom: 1rem;"></div>', unsafe_allow_html=True)
 
 # ================= DETALHES DO POST GLOBAL =================
 if st.session_state.post_selecionado_id:
     st.markdown("<div id='ancora_detalhes' style='padding-top: 20px;'></div>", unsafe_allow_html=True)
     
-    # Garante a rolagem independente de cliques duplicados através do TimeStamp
+    # O TimeStamp atualizado força a rolagem toda vez que você clica em Ver
     if st.session_state.scroll_trigger > 0:
         components.html(f"""
             <script>
@@ -307,7 +311,7 @@ if st.session_state.post_selecionado_id:
                 }}, 300);
             </script>
         """, height=0, width=0)
-        st.session_state.scroll_trigger = 0 # Previne loops
+        st.session_state.scroll_trigger = 0 
     
     st.divider()
     post_idx = next((i for i, item in enumerate(st.session_state.posts) if item["id"] == st.session_state.post_selecionado_id), None)
