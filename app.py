@@ -20,7 +20,8 @@ CATEGORIAS_INFO = {
     "Local e Hotéis do Evento": {"cor": "#2ecc71", "emoji": "🟢"},
     "Pessoas e Palestrantes": {"cor": "#e74c3c", "emoji": "🔴"},
     "Cronograma": {"cor": "#f39c12", "emoji": "🟠"},
-    "Atividades": {"cor": "#9b59b6", "emoji": "🟣"}
+    "Atividades": {"cor": "#9b59b6", "emoji": "🟣"},
+    "Orientações e Avisos": {"cor": "#1abc9c", "emoji": "📢"}
 }
 
 # Cores e Categorias de IDEIAS
