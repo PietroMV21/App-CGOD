@@ -14,7 +14,7 @@ st.set_page_config(page_title="Mídia CGOD XXXV", layout="wide", initial_sidebar
 ARQUIVO_DADOS = "posts_dados.json"
 ARQUIVO_IDEIAS = "ideias_dados.json"
 
-# Cores e Categorias de POSTS
+# Cores e Categorias de POSTS (Nova Categoria Adicionada)
 CATEGORIAS_INFO = {
     "Lote, Kit e Brindes": {"cor": "#3498db", "emoji": "🔵"},
     "Local e Hotéis do Evento": {"cor": "#2ecc71", "emoji": "🟢"},
@@ -41,9 +41,10 @@ def formatar_categoria(cat):
 
 # Função para renderizar o botão nativo do Cronograma
 def renderizar_botao_cronograma(p):
-    icone_status = STATUS_EMOJIS[p['status']]
+    # Agora a bolinha exibida é a da categoria
+    emoji_categoria = CATEGORIAS_INFO[p['categoria']]['emoji']
     
-    if st.button(f"{icone_status} {p['titulo']}", key=f"cal_btn_{p['id']}", use_container_width=True):
+    if st.button(f"{emoji_categoria} {p['titulo']}", key=f"cal_btn_{p['id']}", use_container_width=True):
         st.session_state.post_selecionado_id = p['id']
         st.session_state.edit_mode = False
         st.session_state.scroll_trigger = time.time()
@@ -263,15 +264,16 @@ if tela == "📊 Dashboard Geral":
         col_list = st.columns(len(futuros) if len(futuros) > 0 else 1)
         
         for idx, (i, row) in enumerate(futuros.iterrows()):
-            cor_categoria = CATEGORIAS_INFO[row['categoria']]['cor']
-            icone_status = STATUS_EMOJIS[row['status']]
+            emoji_categoria = CATEGORIAS_INFO[row['categoria']]['emoji']
+            cor_status = STATUS_COLORS[row['status']]
             
             with col_list[idx]:
+                # Dashboard atualizado com a faixa de status e o emoji da categoria
                 st.markdown(f"""
-                    <div style="background-color: #262730; border-top: 5px solid {cor_categoria}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px;">
+                    <div style="background-color: #262730; border-top: 5px solid {cor_status}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px;">
                         <small style="opacity: 0.8;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-                            <span style="font-size: 14px;">{icone_status}</span>
+                            <span style="font-size: 14px;">{emoji_categoria}</span>
                             <strong style="font-size: 14px;">{row['titulo']}</strong>
                         </div>
                     </div>
@@ -353,8 +355,9 @@ elif tela == "📅 Cronograma de Posts":
             with st.container(border=True):
                 c1, c2 = st.columns([3, 2])
                 with c1: 
-                    icone_status = STATUS_EMOJIS[p['status']]
-                    st.subheader(f"{icone_status} {p['titulo']}")
+                    # Atualizado para o emoji da categoria
+                    emoji_categoria = CATEGORIAS_INFO[p['categoria']]['emoji']
+                    st.subheader(f"{emoji_categoria} {p['titulo']}")
                 with c2:
                     if not st.session_state.edit_mode:
                         col_b1, col_b2 = st.columns(2)
@@ -369,6 +372,15 @@ elif tela == "📅 Cronograma de Posts":
                         col_s1, col_s2 = st.columns(2)
                         with col_s1:
                             if st.button("💾 Salvar", type="primary", use_container_width=True):
+                                p['titulo'] = st.session_state.edit_post_titulo
+                                p['responsavel'] = st.session_state.edit_post_resp
+                                p['link'] = st.session_state.edit_post_link
+                                p['data'] = st.session_state.edit_post_data.strftime("%Y-%m-%d")
+                                p['categoria'] = st.session_state.edit_post_cat
+                                p['status'] = st.session_state.edit_post_status
+                                p['descricao'] = st.session_state.edit_post_desc
+                                p['orientacoes'] = st.session_state.edit_post_ori
+                                
                                 st.session_state.edit_mode = False
                                 salvar_dados(st.session_state.posts)
                                 st.success("Post atualizado!")
@@ -380,16 +392,16 @@ elif tela == "📅 Cronograma de Posts":
 
                 if st.session_state.edit_mode:
                     col_e1, col_e2 = st.columns(2)
-                    p['titulo'] = col_e1.text_input("Título", p['titulo'])
-                    p['responsavel'] = col_e1.text_input("Responsável", p['responsavel'])
-                    p['link'] = col_e1.text_input("Link da Postagem", p.get('link', ''))
+                    col_e1.text_input("Título", p['titulo'], key="edit_post_titulo")
+                    col_e1.text_input("Responsável", p['responsavel'], key="edit_post_resp")
+                    col_e1.text_input("Link da Postagem", p.get('link', ''), key="edit_post_link")
                     
-                    p['data'] = col_e2.date_input("Data", datetime.datetime.strptime(p['data'], '%Y-%m-%d')).strftime("%Y-%m-%d")
-                    p['categoria'] = col_e2.selectbox("Categoria", list(CATEGORIAS_INFO.keys()), index=list(CATEGORIAS_INFO.keys()).index(p['categoria']), format_func=formatar_categoria)
-                    p['status'] = col_e2.selectbox("Status", ["Programado", "Concluído", "Atrasado"], index=["Programado", "Concluído", "Atrasado"].index(p['status']))
+                    col_e2.date_input("Data", datetime.datetime.strptime(p['data'], '%Y-%m-%d'), key="edit_post_data")
+                    col_e2.selectbox("Categoria", list(CATEGORIAS_INFO.keys()), index=list(CATEGORIAS_INFO.keys()).index(p['categoria']), format_func=formatar_categoria, key="edit_post_cat")
+                    col_e2.selectbox("Status", ["Programado", "Concluído", "Atrasado"], index=["Programado", "Concluído", "Atrasado"].index(p['status']), key="edit_post_status")
                     
-                    p['descricao'] = st.text_area("Descrição do Post", p.get('descricao', ''))
-                    p['orientacoes'] = st.text_area("Orientações", p.get('orientacoes', ''))
+                    st.text_area("Descrição do Post", p.get('descricao', ''), key="edit_post_desc")
+                    st.text_area("Orientações", p.get('orientacoes', ''), key="edit_post_ori")
                 
                 else:
                     col_v1, col_v2 = st.columns(2)
@@ -510,6 +522,10 @@ elif tela == "💡 Mural de Ideias":
                         c_s1, c_s2 = st.columns(2)
                         with c_s1:
                             if st.button("💾 Salvar", key="save_i", type="primary", use_container_width=True):
+                                ideia_obj['categoria'] = st.session_state.edit_i_cat
+                                ideia_obj['responsavel'] = st.session_state.edit_i_resp
+                                ideia_obj['texto'] = st.session_state.edit_i_text
+                                
                                 st.session_state.edit_ideia_mode = False
                                 salvar_ideias(st.session_state.ideias)
                                 st.success("Ideia atualizada!")
@@ -523,9 +539,9 @@ elif tela == "💡 Mural de Ideias":
                 
                 if st.session_state.edit_ideia_mode:
                     col_ed1, col_ed2 = st.columns([1, 2])
-                    ideia_obj['categoria'] = col_ed1.selectbox("Categoria", list(CATEGORIAS_IDEIAS.keys()), index=list(CATEGORIAS_IDEIAS.keys()).index(ideia_obj['categoria']))
-                    ideia_obj['responsavel'] = col_ed1.text_input("Responsável", ideia_obj['responsavel'])
-                    ideia_obj['texto'] = col_ed2.text_area("Comentário / Ideia", ideia_obj['texto'], height=150)
+                    col_ed1.selectbox("Categoria", list(CATEGORIAS_IDEIAS.keys()), index=list(CATEGORIAS_IDEIAS.keys()).index(ideia_obj['categoria']), key="edit_i_cat")
+                    col_ed1.text_input("Responsável", ideia_obj['responsavel'], key="edit_i_resp")
+                    col_ed2.text_area("Comentário / Ideia", ideia_obj['texto'], height=150, key="edit_i_text")
                 else:
                     col_v1, col_v2 = st.columns([1, 2])
                     with col_v1:
