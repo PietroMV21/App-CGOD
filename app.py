@@ -29,7 +29,7 @@ STATUS_COLORS = {"Programado": "#f1c40f", "Concluído": "#2ecc71", "Atrasado": "
 def formatar_categoria(cat):
     return f"{CATEGORIAS_INFO[cat]['emoji']} {cat}"
 
-# Função para renderizar o botão do Cronograma
+# Função simples, funcional e nativa para o cronograma
 def renderizar_botao_cronograma(p):
     icone_status = STATUS_EMOJIS[p['status']]
     
@@ -62,7 +62,10 @@ if 'edit_mode' not in st.session_state:
 if 'scroll_trigger' not in st.session_state:
     st.session_state.scroll_trigger = 0
 
-data_hoje = datetime.date.today()
+# Correção Definitiva de Fuso Horário (Força UTC-3 para o Brasil)
+fuso_br = datetime.timezone(datetime.timedelta(hours=-3))
+data_hoje = datetime.datetime.now(fuso_br).date()
+
 data_evento = datetime.date(2026, 10, 10)
 data_inicio_contagem = datetime.date(2026, 9, 5) 
 
@@ -191,10 +194,11 @@ if tela == "📊 Dashboard Geral":
         for idx, (i, row) in enumerate(futuros.iterrows()):
             cor_categoria = CATEGORIAS_INFO[row['categoria']]['cor']
             icone_status = STATUS_EMOJIS[row['status']]
+            cor_status = STATUS_COLORS[row['status']]
             
             with col_list[idx]:
                 st.markdown(f"""
-                    <div style="background-color: #262730; border-top: 5px solid {cor_categoria}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px;">
+                    <div style="background-color: #262730; border-top: 5px solid {cor_categoria}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <small style="opacity: 0.8;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                             <span style="font-size: 14px;">{icone_status}</span>
@@ -239,12 +243,12 @@ else:
                 if qtd > max_posts_na_semana:
                     max_posts_na_semana = qtd
         
-        # 2. Define a altura exata em pixels para nivelar todos os 7 dias da semana
-        altura_container = max(130, 65 + max_posts_na_semana * 60)
+        # 2. Define a altura exata para todos os dias baseada no dia mais cheio
+        altura_container = max(110, 60 + max_posts_na_semana * 50)
 
         for i, dia in enumerate(semana):
             with cols[i]:
-                # O container com altura explícita garante que todos os dias fiquem perfeitamente alinhados
+                # O parâmetro 'height' do container garante que todos fiquem perfeitamente alinhados
                 with st.container(height=altura_container, border=True):
                     if dia == 0:
                         st.markdown("&nbsp;")
