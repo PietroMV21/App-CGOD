@@ -12,14 +12,23 @@ import time
 st.set_page_config(page_title="Mídia CGOD XXXV", layout="wide", initial_sidebar_state="expanded")
 
 ARQUIVO_DADOS = "posts_dados.json"
+ARQUIVO_IDEIAS = "ideias_dados.json"
 
-# Cores e Categorias
+# Cores e Categorias de POSTS
 CATEGORIAS_INFO = {
     "Lote, Kit e Brindes": {"cor": "#3498db", "emoji": "🔵"},
     "Local e Hotéis do Evento": {"cor": "#2ecc71", "emoji": "🟢"},
     "Pessoas e Palestrantes": {"cor": "#e74c3c", "emoji": "🔴"},
     "Cronograma": {"cor": "#f39c12", "emoji": "🟠"},
     "Atividades": {"cor": "#9b59b6", "emoji": "🟣"}
+}
+
+# Cores e Categorias de IDEIAS
+CATEGORIAS_IDEIAS = {
+    "Sugestão": "#3498db",          # Azul
+    "Crítica": "#e74c3c",           # Vermelho
+    "Ideia de Posts": "#2ecc71",    # Verde
+    "Comentários Gerais": "#95a5a6" # Cinza
 }
 
 # Configuração de Status
@@ -29,7 +38,7 @@ STATUS_COLORS = {"Programado": "#f1c40f", "Concluído": "#2ecc71", "Atrasado": "
 def formatar_categoria(cat):
     return f"{CATEGORIAS_INFO[cat]['emoji']} {cat}"
 
-# Função simples, funcional e nativa para o cronograma
+# Função para renderizar o botão nativo do Cronograma
 def renderizar_botao_cronograma(p):
     icone_status = STATUS_EMOJIS[p['status']]
     
@@ -39,7 +48,7 @@ def renderizar_botao_cronograma(p):
         st.session_state.scroll_trigger = time.time()
         st.rerun()
 
-# 2. Funções de Dados
+# 2. Funções de Dados (Posts e Ideias)
 def carregar_dados():
     if os.path.exists(ARQUIVO_DADOS):
         try:
@@ -52,6 +61,18 @@ def salvar_dados(dados):
     with open(ARQUIVO_DADOS, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
+def carregar_ideias():
+    if os.path.exists(ARQUIVO_IDEIAS):
+        try:
+            with open(ARQUIVO_IDEIAS, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except: return []
+    return []
+
+def salvar_ideias(dados):
+    with open(ARQUIVO_IDEIAS, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=4)
+
 # Inicialização de variáveis globais
 if 'posts' not in st.session_state:
     st.session_state.posts = carregar_dados()
@@ -62,7 +83,17 @@ if 'edit_mode' not in st.session_state:
 if 'scroll_trigger' not in st.session_state:
     st.session_state.scroll_trigger = 0
 
-# Correção Definitiva de Fuso Horário (Força UTC-3 para o Brasil)
+# Variáveis Globais do Mural de Ideias
+if 'ideias' not in st.session_state:
+    st.session_state.ideias = carregar_ideias()
+if 'ideia_selecionada_id' not in st.session_state:
+    st.session_state.ideia_selecionada_id = None
+if 'edit_ideia_mode' not in st.session_state:
+    st.session_state.edit_ideia_mode = False
+if 'scroll_trigger_ideia' not in st.session_state:
+    st.session_state.scroll_trigger_ideia = 0
+
+# Fuso Horário Brasil
 fuso_br = datetime.timezone(datetime.timedelta(hours=-3))
 data_hoje = datetime.datetime.now(fuso_br).date()
 
@@ -83,13 +114,13 @@ with st.sidebar:
         st.warning("Arquivo 'Logo CGOD.jpg' não encontrado.")
     
     st.title("Navegação")
-    tela = st.radio("Selecione a tela:", ["📊 Dashboard Geral", "📅 Cronograma de Posts"])
+    tela = st.radio("Selecione a tela:", ["📊 Dashboard Geral", "📅 Cronograma de Posts", "💡 Mural de Ideias"])
     
     st.divider()
     st.markdown("### XXXV Congresso Estadual")
     st.caption("Erechim - RS | 10 e 11 de Outubro")
 
-# 4. Diálogos Flutuantes (Cadastro e Exclusão)
+# 4. Diálogos Flutuantes (Postagens)
 @st.dialog("Cadastrar Novo Post")
 def janela_adicionar_post():
     t = st.text_input("Título do Post")
@@ -134,7 +165,46 @@ def janela_confirmar_exclusao(post_id):
         if st.button("Cancelar", use_container_width=True):
             st.rerun()
 
-# 5. Lógica de atualização de Atrasos
+# Diálogos Flutuantes (Mural de Ideias)
+@st.dialog("Nova Ideia ou Comentário")
+def janela_adicionar_ideia():
+    c = st.selectbox("Categoria", list(CATEGORIAS_IDEIAS.keys()))
+    r = st.text_input("Responsável")
+    texto = st.text_area("Escreva aqui sua ideia ou comentário...", height=150)
+    
+    if st.button("Adicionar ao Mural", type="primary"):
+        if texto and r:
+            nova_ideia = {
+                "id": int(datetime.datetime.now().timestamp()), 
+                "responsavel": r, 
+                "categoria": c, 
+                "texto": texto,
+                "data": data_hoje.strftime("%Y-%m-%d")
+            }
+            st.session_state.ideias.append(nova_ideia)
+            salvar_ideias(st.session_state.ideias)
+            st.rerun()
+        else:
+            st.error("Preencha o responsável e o comentário.")
+
+@st.dialog("Excluir Ideia")
+def janela_confirmar_exclusao_ideia(ideia_id):
+    st.warning("⚠️ Tem certeza que deseja excluir este comentário/ideia? Essa ação não poderá ser desfeita.")
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        if st.button("Sim, Excluir", type="primary", use_container_width=True):
+            st.session_state.ideias = [i for i in st.session_state.ideias if i['id'] != ideia_id]
+            salvar_ideias(st.session_state.ideias)
+            st.session_state.ideia_selecionada_id = None
+            st.session_state.edit_ideia_mode = False
+            st.success("Ideia excluída com sucesso!")
+            time.sleep(0.5)
+            st.rerun()
+    with col_c2:
+        if st.button("Cancelar", use_container_width=True):
+            st.rerun()
+
+# 5. Lógica de atualização de Atrasos (Posts)
 total = len(st.session_state.posts)
 df = pd.DataFrame(st.session_state.posts) if total > 0 else pd.DataFrame(columns=['status', 'data', 'categoria', 'link'])
 
@@ -194,11 +264,10 @@ if tela == "📊 Dashboard Geral":
         for idx, (i, row) in enumerate(futuros.iterrows()):
             cor_categoria = CATEGORIAS_INFO[row['categoria']]['cor']
             icone_status = STATUS_EMOJIS[row['status']]
-            cor_status = STATUS_COLORS[row['status']]
             
             with col_list[idx]:
                 st.markdown(f"""
-                    <div style="background-color: #262730; border-top: 5px solid {cor_categoria}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px; border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <div style="background-color: #262730; border-top: 5px solid {cor_categoria}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px;">
                         <small style="opacity: 0.8;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                             <span style="font-size: 14px;">{icone_status}</span>
@@ -216,7 +285,7 @@ if tela == "📊 Dashboard Geral":
         st.info("Nenhum post futuro programado.")
 
 # ================= TELA: CRONOGRAMA =================
-else:
+elif tela == "📅 Cronograma de Posts":
     col_t1, col_t2 = st.columns([4, 1])
     with col_t1: st.header("Calendário de Postagens")
     with col_t2: 
@@ -235,7 +304,6 @@ else:
     for semana in cal:
         cols = st.columns(7)
         
-        # 1. Identificar o número máximo de posts nos dias desta semana
         max_posts_na_semana = 0
         for dia in semana:
             if dia != 0:
@@ -243,12 +311,10 @@ else:
                 if qtd > max_posts_na_semana:
                     max_posts_na_semana = qtd
         
-        # 2. Define a altura exata para todos os dias baseada no dia mais cheio
         altura_container = max(110, 60 + max_posts_na_semana * 50)
 
         for i, dia in enumerate(semana):
             with cols[i]:
-                # O parâmetro 'height' do container garante que todos fiquem perfeitamente alinhados
                 with st.container(height=altura_container, border=True):
                     if dia == 0:
                         st.markdown("&nbsp;")
@@ -260,101 +326,212 @@ else:
                         for p in posts_dia:
                             renderizar_botao_cronograma(p)
 
-# ================= DETALHES DO POST GLOBAL =================
-if st.session_state.post_selecionado_id:
-    st.markdown("<div id='ancora_detalhes' style='padding-top: 20px;'></div>", unsafe_allow_html=True)
-    
-    if st.session_state.scroll_trigger > 0:
-        components.html(f"""
-            <script>
-                setTimeout(function() {{
-                    const elements = window.parent.document.querySelectorAll('#ancora_detalhes');
-                    if (elements.length > 0) {{
-                        elements[elements.length - 1].scrollIntoView({{behavior: 'smooth', block: 'start'}});
-                    }}
-                }}, 300);
-            </script>
-        """, height=0, width=0)
-        st.session_state.scroll_trigger = 0 
-    
-    st.divider()
-    post_idx = next((i for i, item in enumerate(st.session_state.posts) if item["id"] == st.session_state.post_selecionado_id), None)
-    
-    if post_idx is not None:
-        p = st.session_state.posts[post_idx]
+    # Detalhamento de Posts
+    if st.session_state.post_selecionado_id:
+        st.markdown("<div id='ancora_detalhes' style='padding-top: 20px;'></div>", unsafe_allow_html=True)
         
-        with st.container(border=True):
-            c1, c2 = st.columns([3, 2])
-            with c1: 
-                icone_status = STATUS_EMOJIS[p['status']]
-                st.subheader(f"{icone_status} {p['titulo']}")
-            with c2:
-                if not st.session_state.edit_mode:
-                    col_b1, col_b2 = st.columns(2)
-                    with col_b1:
-                        if st.button("📝 Editar Post", use_container_width=True):
-                            st.session_state.edit_mode = True
-                            st.rerun()
-                    with col_b2:
-                        if st.button("🗑️ Excluir", use_container_width=True):
-                            janela_confirmar_exclusao(p['id'])
-                else:
-                    col_s1, col_s2 = st.columns(2)
-                    with col_s1:
-                        if st.button("💾 Salvar", type="primary", use_container_width=True):
-                            st.session_state.edit_mode = False
-                            salvar_dados(st.session_state.posts)
-                            st.success("Post atualizado!")
-                            st.rerun()
-                    with col_s2:
-                        if st.button("❌ Cancelar", use_container_width=True):
-                            st.session_state.edit_mode = False
-                            st.rerun()
-
-            if st.session_state.edit_mode:
-                col_e1, col_e2 = st.columns(2)
-                p['titulo'] = col_e1.text_input("Título", p['titulo'])
-                p['responsavel'] = col_e1.text_input("Responsável", p['responsavel'])
-                p['link'] = col_e1.text_input("Link da Postagem", p.get('link', ''))
-                
-                p['data'] = col_e2.date_input("Data", datetime.datetime.strptime(p['data'], '%Y-%m-%d')).strftime("%Y-%m-%d")
-                p['categoria'] = col_e2.selectbox("Categoria", list(CATEGORIAS_INFO.keys()), index=list(CATEGORIAS_INFO.keys()).index(p['categoria']), format_func=formatar_categoria)
-                p['status'] = col_e2.selectbox("Status", ["Programado", "Concluído", "Atrasado"], index=["Programado", "Concluído", "Atrasado"].index(p['status']))
-                
-                p['descricao'] = st.text_area("Descrição do Post", p.get('descricao', ''))
-                p['orientacoes'] = st.text_area("Orientações", p.get('orientacoes', ''))
+        if st.session_state.scroll_trigger > 0:
+            components.html(f"""
+                <script>
+                    setTimeout(function() {{
+                        const elements = window.parent.document.querySelectorAll('#ancora_detalhes');
+                        if (elements.length > 0) {{
+                            elements[elements.length - 1].scrollIntoView({{behavior: 'smooth', block: 'start'}});
+                        }}
+                    }}, 300);
+                </script>
+            """, height=0, width=0)
+            st.session_state.scroll_trigger = 0 
+        
+        st.divider()
+        post_idx = next((i for i, item in enumerate(st.session_state.posts) if item["id"] == st.session_state.post_selecionado_id), None)
+        
+        if post_idx is not None:
+            p = st.session_state.posts[post_idx]
             
-            else:
-                col_v1, col_v2 = st.columns(2)
-                col_v1.markdown(f"**Responsável:** {p['responsavel']}")
-                col_v1.markdown(f"**Data:** {datetime.datetime.strptime(p['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}")
-                
-                link_text = p.get('link', '').strip()
-                if link_text:
-                    col_v1.markdown(f"**Link:** [Acessar Publicação]({link_text})")
-                else:
-                    col_v1.markdown("**Link:** *Não informado*")
+            with st.container(border=True):
+                c1, c2 = st.columns([3, 2])
+                with c1: 
+                    icone_status = STATUS_EMOJIS[p['status']]
+                    st.subheader(f"{icone_status} {p['titulo']}")
+                with c2:
+                    if not st.session_state.edit_mode:
+                        col_b1, col_b2 = st.columns(2)
+                        with col_b1:
+                            if st.button("📝 Editar Post", use_container_width=True):
+                                st.session_state.edit_mode = True
+                                st.rerun()
+                        with col_b2:
+                            if st.button("🗑️ Excluir", use_container_width=True):
+                                janela_confirmar_exclusao(p['id'])
+                    else:
+                        col_s1, col_s2 = st.columns(2)
+                        with col_s1:
+                            if st.button("💾 Salvar", type="primary", use_container_width=True):
+                                st.session_state.edit_mode = False
+                                salvar_dados(st.session_state.posts)
+                                st.success("Post atualizado!")
+                                st.rerun()
+                        with col_s2:
+                            if st.button("❌ Cancelar", use_container_width=True):
+                                st.session_state.edit_mode = False
+                                st.rerun()
+
+                if st.session_state.edit_mode:
+                    col_e1, col_e2 = st.columns(2)
+                    p['titulo'] = col_e1.text_input("Título", p['titulo'])
+                    p['responsavel'] = col_e1.text_input("Responsável", p['responsavel'])
+                    p['link'] = col_e1.text_input("Link da Postagem", p.get('link', ''))
                     
-                col_v2.markdown(f"**Categoria:** {formatar_categoria(p['categoria'])}")
+                    p['data'] = col_e2.date_input("Data", datetime.datetime.strptime(p['data'], '%Y-%m-%d')).strftime("%Y-%m-%d")
+                    p['categoria'] = col_e2.selectbox("Categoria", list(CATEGORIAS_INFO.keys()), index=list(CATEGORIAS_INFO.keys()).index(p['categoria']), format_func=formatar_categoria)
+                    p['status'] = col_e2.selectbox("Status", ["Programado", "Concluído", "Atrasado"], index=["Programado", "Concluído", "Atrasado"].index(p['status']))
+                    
+                    p['descricao'] = st.text_area("Descrição do Post", p.get('descricao', ''))
+                    p['orientacoes'] = st.text_area("Orientações", p.get('orientacoes', ''))
                 
-                cor_status = STATUS_COLORS.get(p['status'], "white")
-                col_v2.markdown(f"**Status:** <span style='background-color:{cor_status}; color:white; padding: 2px 8px; border-radius: 12px; font-weight:bold; font-size:12px;'>{p['status']}</span>", unsafe_allow_html=True)
+                else:
+                    col_v1, col_v2 = st.columns(2)
+                    col_v1.markdown(f"**Responsável:** {p['responsavel']}")
+                    col_v1.markdown(f"**Data:** {datetime.datetime.strptime(p['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}")
+                    
+                    link_text = p.get('link', '').strip()
+                    if link_text:
+                        col_v1.markdown(f"**Link:** [Acessar Publicação]({link_text})")
+                    else:
+                        col_v1.markdown("**Link:** *Não informado*")
+                        
+                    col_v2.markdown(f"**Categoria:** {formatar_categoria(p['categoria'])}")
+                    
+                    cor_status = STATUS_COLORS.get(p['status'], "white")
+                    col_v2.markdown(f"**Status:** <span style='background-color:{cor_status}; color:white; padding: 2px 8px; border-radius: 12px; font-weight:bold; font-size:12px;'>{p['status']}</span>", unsafe_allow_html=True)
+                    
+                    st.write("---")
+                    col_t1, col_t2 = st.columns(2)
+                    
+                    desc_text = p.get('descricao', '').strip()
+                    ori_text = p.get('orientacoes', '').strip()
+                    
+                    with col_t1:
+                        st.markdown("**Descrição do Post:**")
+                        if desc_text:
+                            st.info(desc_text)
+                        else:
+                            st.info("Descrição não informada.")
+                    with col_t2:
+                        st.markdown("**Orientações:**")
+                        if ori_text:
+                            st.warning(ori_text)
+                        else:
+                            st.warning("Orientação não informada.")
+
+# ================= TELA: MURAL DE IDEIAS =================
+elif tela == "💡 Mural de Ideias":
+    col_t1, col_t2 = st.columns([4, 1])
+    with col_t1: st.header("Mural de Ideias e Comentários")
+    with col_t2: 
+        if st.button("➕ Adicionar Ideia", use_container_width=True, type="primary"):
+            janela_adicionar_ideia()
+            
+    st.divider()
+    
+    if not st.session_state.ideias:
+        st.info("O mural está vazio. Que tal inserir a primeira ideia? 💡")
+    else:
+        # Coloca as ideias mais novas primeiro
+        ideias_ordenadas = sorted(st.session_state.ideias, key=lambda x: x['id'], reverse=True)
+        
+        # Grid layout (4 colunas)
+        cols_mural = st.columns(4)
+        
+        for idx, ideia in enumerate(ideias_ordenadas):
+            col_alvo = cols_mural[idx % 4]
+            cor_tag = CATEGORIAS_IDEIAS.get(ideia['categoria'], "#95a5a6")
+            
+            # Trunca o texto longo para o cartão visual
+            texto_preview = ideia['texto'][:85] + "..." if len(ideia['texto']) > 85 else ideia['texto']
+            
+            with col_alvo:
+                # O Card Visual do Mural
+                st.markdown(f"""
+                    <div style="background-color: #262730; border-left: 5px solid {cor_tag}; padding: 12px; border-radius: 6px; color: white; min-height: 140px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px;">
+                        <span style="background-color: {cor_tag}; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">{ideia['categoria']}</span>
+                        <div style="margin-top: 12px; font-size: 14px; line-height: 1.4; color: #ddd; word-wrap: break-word;">{texto_preview}</div>
+                    </div>
+                """, unsafe_allow_html=True)
                 
+                # Botão para expandir e ler a ideia toda
+                if st.button("Abrir", key=f"btn_ideia_{ideia['id']}", use_container_width=True):
+                    st.session_state.ideia_selecionada_id = ideia['id']
+                    st.session_state.edit_ideia_mode = False
+                    st.session_state.scroll_trigger_ideia = time.time()
+                    st.rerun()
+
+    # Janela de Detalhes da Ideia (Na base do mural)
+    if st.session_state.ideia_selecionada_id:
+        st.markdown("<div id='ancora_detalhes_ideia' style='padding-top: 20px;'></div>", unsafe_allow_html=True)
+        
+        if st.session_state.scroll_trigger_ideia > 0:
+            components.html(f"""
+                <script>
+                    setTimeout(function() {{
+                        const elements = window.parent.document.querySelectorAll('#ancora_detalhes_ideia');
+                        if (elements.length > 0) {{
+                            elements[elements.length - 1].scrollIntoView({{behavior: 'smooth', block: 'start'}});
+                        }}
+                    }}, 300);
+                </script>
+            """, height=0, width=0)
+            st.session_state.scroll_trigger_ideia = 0
+            
+        st.divider()
+        ideia_idx = next((i for i, item in enumerate(st.session_state.ideias) if item["id"] == st.session_state.ideia_selecionada_id), None)
+        
+        if ideia_idx is not None:
+            ideia_obj = st.session_state.ideias[ideia_idx]
+            cor_tag = CATEGORIAS_IDEIAS.get(ideia_obj['categoria'], "#95a5a6")
+            
+            with st.container(border=True):
+                col_i1, col_i2 = st.columns([3, 2])
+                with col_i1:
+                    st.markdown(f"### Detalhes do Comentário")
+                with col_i2:
+                    if not st.session_state.edit_ideia_mode:
+                        c_b1, c_b2 = st.columns(2)
+                        with c_b1:
+                            if st.button("📝 Editar", key="edit_i", use_container_width=True):
+                                st.session_state.edit_ideia_mode = True
+                                st.rerun()
+                        with c_b2:
+                            if st.button("🗑️ Excluir", key="del_i", use_container_width=True):
+                                janela_confirmar_exclusao_ideia(ideia_obj['id'])
+                    else:
+                        c_s1, c_s2 = st.columns(2)
+                        with c_s1:
+                            if st.button("💾 Salvar", key="save_i", type="primary", use_container_width=True):
+                                st.session_state.edit_ideia_mode = False
+                                salvar_ideias(st.session_state.ideias)
+                                st.success("Ideia atualizada!")
+                                st.rerun()
+                        with c_s2:
+                            if st.button("❌ Cancelar", key="cancel_i", use_container_width=True):
+                                st.session_state.edit_ideia_mode = False
+                                st.rerun()
+
                 st.write("---")
-                col_t1, col_t2 = st.columns(2)
                 
-                desc_text = p.get('descricao', '').strip()
-                ori_text = p.get('orientacoes', '').strip()
-                
-                with col_t1:
-                    st.markdown("**Descrição do Post:**")
-                    if desc_text:
-                        st.info(desc_text)
-                    else:
-                        st.info("Descrição não informada.")
-                with col_t2:
-                    st.markdown("**Orientações:**")
-                    if ori_text:
-                        st.warning(ori_text)
-                    else:
-                        st.warning("Orientação não informada.")
+                if st.session_state.edit_ideia_mode:
+                    col_ed1, col_ed2 = st.columns([1, 2])
+                    ideia_obj['categoria'] = col_ed1.selectbox("Categoria", list(CATEGORIAS_IDEIAS.keys()), index=list(CATEGORIAS_IDEIAS.keys()).index(ideia_obj['categoria']))
+                    ideia_obj['responsavel'] = col_ed1.text_input("Responsável", ideia_obj['responsavel'])
+                    ideia_obj['texto'] = col_ed2.text_area("Comentário / Ideia", ideia_obj['texto'], height=150)
+                else:
+                    col_v1, col_v2 = st.columns([1, 2])
+                    with col_v1:
+                        st.markdown(f"**Categoria:** <span style='background-color:{cor_tag}; color:white; padding: 2px 8px; border-radius: 12px; font-size:12px; font-weight:bold;'>{ideia_obj['categoria']}</span>", unsafe_allow_html=True)
+                        st.markdown(f"**Responsável:** {ideia_obj['responsavel']}")
+                        data_f = datetime.datetime.strptime(ideia_obj['data'], "%Y-%m-%d").strftime("%d/%m/%Y") if 'data' in ideia_obj else "Desconhecida"
+                        st.markdown(f"**Registrado em:** {data_f}")
+                    with col_v2:
+                        st.markdown("**Comentário escrito:**")
+                        st.info(ideia_obj['texto'])
