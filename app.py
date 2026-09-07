@@ -1,20 +1,18 @@
 import streamlit as st
 import datetime
 import calendar
-import json
-import os
 import pandas as pd
 import plotly.express as px
 import streamlit.components.v1 as components
 import time
+import os
+import gspread
+from google.oauth2.service_account import Credentials
 
 # 1. Configuração Inicial
 st.set_page_config(page_title="Mídia CGOD XXXV", layout="wide", initial_sidebar_state="expanded")
 
-ARQUIVO_DADOS = "posts_dados.json"
-ARQUIVO_IDEIAS = "ideias_dados.json"
-
-# Cores e Categorias de POSTS (Nova Categoria Adicionada)
+# Cores e Categorias de POSTS
 CATEGORIAS_INFO = {
     "Lote, Kit e Brindes": {"cor": "#3498db", "emoji": "🔵"},
     "Local e Hotéis do Evento": {"cor": "#2ecc71", "emoji": "🟢"},
@@ -26,10 +24,10 @@ CATEGORIAS_INFO = {
 
 # Cores e Categorias de IDEIAS
 CATEGORIAS_IDEIAS = {
-    "Sugestão": "#3498db",          # Azul
-    "Crítica": "#e74c3c",           # Vermelho
-    "Ideia de Posts": "#2ecc71",    # Verde
-    "Comentários Gerais": "#95a5a6" # Cinza
+    "Sugestão": "#3498db",          
+    "Crítica": "#e74c3c",           
+    "Ideia de Posts": "#2ecc71",    
+    "Comentários Gerais": "#95a5a6" 
 }
 
 # Configuração de Status
@@ -41,7 +39,6 @@ def formatar_categoria(cat):
 
 # Função para renderizar o botão nativo do Cronograma
 def renderizar_botao_cronograma(p):
-    # Agora a bolinha exibida é a da categoria
     emoji_categoria = CATEGORIAS_INFO[p['categoria']]['emoji']
     
     if st.button(f"{emoji_categoria} {p['titulo']}", key=f"cal_btn_{p['id']}", use_container_width=True):
@@ -50,32 +47,77 @@ def renderizar_botao_cronograma(p):
         st.session_state.scroll_trigger = time.time()
         st.rerun()
 
-# 2. Funções de Dados (Posts e Ideias)
+# 2. Conexão Segura com Google Sheets (Com Cache para velocidade)
+@st.cache_resource
+def iniciar_conexao_planilha():
+    try:
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        skey = st.secrets["gcp_service_account"]
+        credentials = Credentials.from_service_account_info(
+            skey,
+            scopes=scopes
+        )
+        cliente = gspread.authorize(credentials)
+        planilha_id = st.secrets["SPREADSHEET_ID"]
+        return cliente.open_by_key(planilha_id)
+    except Exception as e:
+        st.error("⚠️ Conexão com o Banco de Dados (Planilha) falhou. Verifique o Streamlit Secrets.")
+        return None
+
+# Funções Dinâmicas de Carga e Salvamento
 def carregar_dados():
-    if os.path.exists(ARQUIVO_DADOS):
+    planilha = iniciar_conexao_planilha()
+    if planilha:
         try:
-            with open(ARQUIVO_DADOS, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except: return []
+            aba = planilha.worksheet("Posts")
+            return aba.get_all_records()
+        except Exception:
+            return []
     return []
 
 def salvar_dados(dados):
-    with open(ARQUIVO_DADOS, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=4)
+    planilha = iniciar_conexao_planilha()
+    if planilha:
+        try:
+            aba = planilha.worksheet("Posts")
+            aba.clear()
+            if dados:
+                # Preenche células vazias para não quebrar a API do Gspread
+                df = pd.DataFrame(dados).fillna("")
+                aba.update(values=[df.columns.values.tolist()] + df.values.tolist(), range_name="A1")
+            else:
+                aba.update(values=[['id', 'titulo', 'responsavel', 'data', 'categoria', 'status', 'descricao', 'orientacoes', 'link']], range_name="A1")
+        except Exception as e:
+            st.error(f"Erro ao salvar postagens no banco: {e}")
 
 def carregar_ideias():
-    if os.path.exists(ARQUIVO_IDEIAS):
+    planilha = iniciar_conexao_planilha()
+    if planilha:
         try:
-            with open(ARQUIVO_IDEIAS, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except: return []
+            aba = planilha.worksheet("Ideias")
+            return aba.get_all_records()
+        except Exception:
+            return []
     return []
 
 def salvar_ideias(dados):
-    with open(ARQUIVO_IDEIAS, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=4)
+    planilha = iniciar_conexao_planilha()
+    if planilha:
+        try:
+            aba = planilha.worksheet("Ideias")
+            aba.clear()
+            if dados:
+                df = pd.DataFrame(dados).fillna("")
+                aba.update(values=[df.columns.values.tolist()] + df.values.tolist(), range_name="A1")
+            else:
+                aba.update(values=[['id', 'responsavel', 'categoria', 'texto', 'data']], range_name="A1")
+        except Exception as e:
+            st.error(f"Erro ao salvar ideias no banco: {e}")
 
-# Inicialização de variáveis globais
+# Inicialização das Variáveis de Sessão
 if 'posts' not in st.session_state:
     st.session_state.posts = carregar_dados()
 if 'post_selecionado_id' not in st.session_state:
@@ -85,7 +127,6 @@ if 'edit_mode' not in st.session_state:
 if 'scroll_trigger' not in st.session_state:
     st.session_state.scroll_trigger = 0
 
-# Variáveis Globais do Mural de Ideias
 if 'ideias' not in st.session_state:
     st.session_state.ideias = carregar_ideias()
 if 'ideia_selecionada_id' not in st.session_state:
@@ -95,7 +136,7 @@ if 'edit_ideia_mode' not in st.session_state:
 if 'scroll_trigger_ideia' not in st.session_state:
     st.session_state.scroll_trigger_ideia = 0
 
-# Fuso Horário Brasil
+# Configurações de Data e Prazos (Força Fuso Horário de Brasília)
 fuso_br = datetime.timezone(datetime.timedelta(hours=-3))
 data_hoje = datetime.datetime.now(fuso_br).date()
 
@@ -206,17 +247,18 @@ def janela_confirmar_exclusao_ideia(ideia_id):
         if st.button("Cancelar", use_container_width=True):
             st.rerun()
 
-# 5. Lógica de atualização de Atrasos (Posts)
-total = len(st.session_state.posts)
-df = pd.DataFrame(st.session_state.posts) if total > 0 else pd.DataFrame(columns=['status', 'data', 'categoria', 'link'])
+# 5. Lógica de atualização de Atrasos (Agora sincroniza no banco de dados se houver alteração real)
+houve_mudanca_atrasos = False
+for post in st.session_state.posts:
+    if datetime.datetime.strptime(str(post['data']), "%Y-%m-%d").date() < data_hoje and post['status'] == 'Programado':
+        post['status'] = 'Atrasado'
+        houve_mudanca_atrasos = True
 
-if not df.empty:
-    df['data_dt'] = pd.to_datetime(df['data']).dt.date
-    df.loc[(df['data_dt'] < data_hoje) & (df['status'] == 'Programado'), 'status'] = 'Atrasado'
-    
-    for post in st.session_state.posts:
-        if datetime.datetime.strptime(post['data'], "%Y-%m-%d").date() < data_hoje and post['status'] == 'Programado':
-            post['status'] = 'Atrasado'
+if houve_mudanca_atrasos:
+    salvar_dados(st.session_state.posts)
+
+# Processa DataFrame de métricas
+df_metrics = pd.DataFrame(st.session_state.posts) if len(st.session_state.posts) > 0 else pd.DataFrame(columns=['status', 'data', 'categoria', 'link'])
 
 # ================= TELA: DASHBOARD =================
 if tela == "📊 Dashboard Geral":
@@ -246,8 +288,8 @@ if tela == "📊 Dashboard Geral":
         st.progress(progresso, text=msg)
 
     with col_m2:
-        if not df.empty:
-            fig = px.pie(df, names='status', title="Status das Postagens", 
+        if not df_metrics.empty:
+            fig = px.pie(df_metrics, names='status', title="Status das Postagens", 
                          color='status', color_discrete_map=STATUS_COLORS,
                          hole=0.4)
             fig.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(color="white", size=14))
@@ -259,8 +301,8 @@ if tela == "📊 Dashboard Geral":
     st.divider()
     
     st.subheader("🗓️ Próximas Postagens (Linha do Tempo)")
-    if not df.empty:
-        futuros = df[df['status'] != 'Concluído'].sort_values('data').head(5)
+    if not df_metrics.empty:
+        futuros = df_metrics[df_metrics['status'] != 'Concluído'].sort_values('data').head(5)
         col_list = st.columns(len(futuros) if len(futuros) > 0 else 1)
         
         for idx, (i, row) in enumerate(futuros.iterrows()):
@@ -268,10 +310,9 @@ if tela == "📊 Dashboard Geral":
             cor_status = STATUS_COLORS[row['status']]
             
             with col_list[idx]:
-                # Dashboard atualizado com a faixa de status e o emoji da categoria
                 st.markdown(f"""
                     <div style="background-color: #262730; border-top: 5px solid {cor_status}; padding: 12px; border-radius: 8px; color: white; min-height: 85px; box-shadow: 2px 2px 5px rgba(0,0,0,0.15); margin-bottom: 5px;">
-                        <small style="opacity: 0.8;">{datetime.datetime.strptime(row['data'], '%Y-%m-%d').strftime('%d/%m')}</small><br>
+                        <small style="opacity: 0.8;">{datetime.datetime.strptime(str(row['data']), '%Y-%m-%d').strftime('%d/%m')}</small><br>
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                             <span style="font-size: 14px;">{emoji_categoria}</span>
                             <strong style="font-size: 14px;">{row['titulo']}</strong>
@@ -355,7 +396,6 @@ elif tela == "📅 Cronograma de Posts":
             with st.container(border=True):
                 c1, c2 = st.columns([3, 2])
                 with c1: 
-                    # Atualizado para o emoji da categoria
                     emoji_categoria = CATEGORIAS_INFO[p['categoria']]['emoji']
                     st.subheader(f"{emoji_categoria} {p['titulo']}")
                 with c2:
@@ -394,21 +434,21 @@ elif tela == "📅 Cronograma de Posts":
                     col_e1, col_e2 = st.columns(2)
                     col_e1.text_input("Título", p['titulo'], key="edit_post_titulo")
                     col_e1.text_input("Responsável", p['responsavel'], key="edit_post_resp")
-                    col_e1.text_input("Link da Postagem", p.get('link', ''), key="edit_post_link")
+                    col_e1.text_input("Link da Postagem", str(p.get('link', '')), key="edit_post_link")
                     
-                    col_e2.date_input("Data", datetime.datetime.strptime(p['data'], '%Y-%m-%d'), key="edit_post_data")
+                    col_e2.date_input("Data", datetime.datetime.strptime(str(p['data']), '%Y-%m-%d'), key="edit_post_data")
                     col_e2.selectbox("Categoria", list(CATEGORIAS_INFO.keys()), index=list(CATEGORIAS_INFO.keys()).index(p['categoria']), format_func=formatar_categoria, key="edit_post_cat")
                     col_e2.selectbox("Status", ["Programado", "Concluído", "Atrasado"], index=["Programado", "Concluído", "Atrasado"].index(p['status']), key="edit_post_status")
                     
-                    st.text_area("Descrição do Post", p.get('descricao', ''), key="edit_post_desc")
-                    st.text_area("Orientações", p.get('orientacoes', ''), key="edit_post_ori")
+                    st.text_area("Descrição do Post", str(p.get('descricao', '')), key="edit_post_desc")
+                    st.text_area("Orientações", str(p.get('orientacoes', '')), key="edit_post_ori")
                 
                 else:
                     col_v1, col_v2 = st.columns(2)
                     col_v1.markdown(f"**Responsável:** {p['responsavel']}")
-                    col_v1.markdown(f"**Data:** {datetime.datetime.strptime(p['data'], '%Y-%m-%d').strftime('%d/%m/%Y')}")
+                    col_v1.markdown(f"**Data:** {datetime.datetime.strptime(str(p['data']), '%Y-%m-%d').strftime('%d/%m/%Y')}")
                     
-                    link_text = p.get('link', '').strip()
+                    link_text = str(p.get('link', '')).strip()
                     if link_text:
                         col_v1.markdown(f"**Link:** [Acessar Publicação]({link_text})")
                     else:
@@ -422,8 +462,8 @@ elif tela == "📅 Cronograma de Posts":
                     st.write("---")
                     col_t1, col_t2 = st.columns(2)
                     
-                    desc_text = p.get('descricao', '').strip()
-                    ori_text = p.get('orientacoes', '').strip()
+                    desc_text = str(p.get('descricao', '')).strip()
+                    ori_text = str(p.get('orientacoes', '')).strip()
                     
                     with col_t1:
                         st.markdown("**Descrição do Post:**")
@@ -462,7 +502,7 @@ elif tela == "💡 Mural de Ideias":
             cor_tag = CATEGORIAS_IDEIAS.get(ideia['categoria'], "#95a5a6")
             
             # Trunca o texto longo para o cartão visual
-            texto_preview = ideia['texto'][:85] + "..." if len(ideia['texto']) > 85 else ideia['texto']
+            texto_preview = ideia['texto'][:85] + "..." if len(str(ideia['texto'])) > 85 else str(ideia['texto'])
             
             with col_alvo:
                 # O Card Visual do Mural
@@ -540,14 +580,14 @@ elif tela == "💡 Mural de Ideias":
                 if st.session_state.edit_ideia_mode:
                     col_ed1, col_ed2 = st.columns([1, 2])
                     col_ed1.selectbox("Categoria", list(CATEGORIAS_IDEIAS.keys()), index=list(CATEGORIAS_IDEIAS.keys()).index(ideia_obj['categoria']), key="edit_i_cat")
-                    col_ed1.text_input("Responsável", ideia_obj['responsavel'], key="edit_i_resp")
-                    col_ed2.text_area("Comentário / Ideia", ideia_obj['texto'], height=150, key="edit_i_text")
+                    col_ed1.text_input("Responsável", str(ideia_obj['responsavel']), key="edit_i_resp")
+                    col_ed2.text_area("Comentário / Ideia", str(ideia_obj['texto']), height=150, key="edit_i_text")
                 else:
                     col_v1, col_v2 = st.columns([1, 2])
                     with col_v1:
                         st.markdown(f"**Categoria:** <span style='background-color:{cor_tag}; color:white; padding: 2px 8px; border-radius: 12px; font-size:12px; font-weight:bold;'>{ideia_obj['categoria']}</span>", unsafe_allow_html=True)
                         st.markdown(f"**Responsável:** {ideia_obj['responsavel']}")
-                        data_f = datetime.datetime.strptime(ideia_obj['data'], "%Y-%m-%d").strftime("%d/%m/%Y") if 'data' in ideia_obj else "Desconhecida"
+                        data_f = datetime.datetime.strptime(str(ideia_obj['data']), "%Y-%m-%d").strftime("%d/%m/%Y") if 'data' in ideia_obj else "Desconhecida"
                         st.markdown(f"**Registrado em:** {data_f}")
                     with col_v2:
                         st.markdown("**Comentário escrito:**")
