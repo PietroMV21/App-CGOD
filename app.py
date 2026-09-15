@@ -47,6 +47,13 @@ def renderizar_botao_cronograma(p):
         st.session_state.scroll_trigger = time.time()
         st.rerun()
 
+# Ação do botão "Ver Detalhes" no Dashboard: abre o post dentro do Cronograma
+def abrir_post_no_cronograma(post_id):
+    st.session_state.post_selecionado_id = post_id
+    st.session_state.edit_mode = False
+    st.session_state.scroll_trigger = time.time()
+    st.session_state.tela_navegacao = "📅 Cronograma de Posts"
+
 # 2. Conexão Segura com Google Sheets (Com Cache para velocidade)
 @st.cache_resource
 def iniciar_conexao_planilha():
@@ -157,7 +164,11 @@ with st.sidebar:
         st.warning("Arquivo 'Logo CGOD.jpg' não encontrado.")
     
     st.title("Navegação")
-    tela = st.radio("Selecione a tela:", ["📊 Dashboard Geral", "📅 Cronograma de Posts", "💡 Mural de Ideias"])
+    tela = st.radio(
+        "Selecione a tela:",
+        ["📊 Dashboard Geral", "📅 Cronograma de Posts", "💡 Mural de Ideias"],
+        key="tela_navegacao"
+    )
     
     st.divider()
     st.markdown("### XXXV Congresso Estadual")
@@ -247,11 +258,24 @@ def janela_confirmar_exclusao_ideia(ideia_id):
         if st.button("Cancelar", use_container_width=True):
             st.rerun()
 
-# 5. Lógica de atualização de Atrasos (Agora sincroniza no banco de dados se houver alteração real)
+# 5. Lógica de atualização de Atrasos (sincroniza com a regra de prazo)
 houve_mudanca_atrasos = False
 for post in st.session_state.posts:
-    if datetime.datetime.strptime(str(post['data']), "%Y-%m-%d").date() < data_hoje and post['status'] == 'Programado':
+    data_post = datetime.datetime.strptime(str(post['data']), "%Y-%m-%d").date()
+    status_atual = str(post.get('status', '')).strip()
+
+    # "Concluído" nunca é alterado automaticamente.
+    if status_atual == 'Concluído':
+        continue
+
+    # Só fica "Atrasado" a partir do dia seguinte ao prazo.
+    if data_post < data_hoje and status_atual != 'Atrasado':
         post['status'] = 'Atrasado'
+        houve_mudanca_atrasos = True
+
+    # Um post futuro ou de hoje não pode aparecer como "Atrasado".
+    elif data_post >= data_hoje and status_atual == 'Atrasado':
+        post['status'] = 'Programado'
         houve_mudanca_atrasos = True
 
 if houve_mudanca_atrasos:
@@ -320,11 +344,13 @@ if tela == "📊 Dashboard Geral":
                     </div>
                 """, unsafe_allow_html=True)
                 
-                if st.button("Ver Detalhes", key=f"dash_btn_{row['id']}", use_container_width=True):
-                    st.session_state.post_selecionado_id = row['id']
-                    st.session_state.edit_mode = False
-                    st.session_state.scroll_trigger = time.time()
-                    st.rerun()
+                st.button(
+                    "Ver Detalhes",
+                    key=f"dash_btn_{row['id']}",
+                    use_container_width=True,
+                    on_click=abrir_post_no_cronograma,
+                    args=(row['id'],)
+                )
     else:
         st.info("Nenhum post futuro programado.")
 
